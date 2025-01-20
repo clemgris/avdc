@@ -1,7 +1,8 @@
 import argparse
 
-from dataset import SequentialDatasetv2
+from dataset import lerobotDataset
 from goal_diffusion import GoalGaussianDiffusion, Trainer
+from omegaconf import DictConfig
 from torch.utils.data import Subset
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
@@ -10,17 +11,40 @@ from unet import UnetMW as Unet
 def main(args):
     valid_n = 1
     sample_per_seq = 8
-    target_size = (128, 128)
+    target_size = (64, 64)
+
+    cfg = DictConfig(
+        {
+            "env": {"fps": 10},
+            "model": {
+                "obs_horizon": 1,
+                "pred_horizon": sample_per_seq - 1,
+            },
+            "expert_data": {
+                "dataset_id": "lerobot/instruct_pusht_Step8_Max64_1k_video",  # "lerobot/pusht"
+                "root": "/home/grislain/AVDC/data",
+            },
+            "delta_timestamps": {
+                "observation_image": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]",
+                "observation_state": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]",
+                "observation_next_image": "[i / ${env.fps} for i in range(1, 1 + ${model.pred_horizon})]",
+                "observation_next_state": "[i / ${env.fps} for i in range(1, 1 + ${model.pred_horizon})]",
+                "action": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1 - ${model.obs_horizon} + ${model.pred_horizon})]",
+            },
+        }
+    )
 
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
     else:
-        train_set = SequentialDatasetv2(
-            sample_per_seq=sample_per_seq,
-            path="../datasets/metaworld",
-            target_size=target_size,
-            randomcrop=True,
-        )
+        # train_set = SequentialDatasetv2(
+        #     sample_per_seq=sample_per_seq,
+        #     path="../datasets/metaworld",
+        #     target_size=target_size,
+        #     randomcrop=True,
+        # )
+
+        train_set = lerobotDataset(cfg)
         valid_inds = [i for i in range(0, len(train_set), len(train_set) // valid_n)][
             :valid_n
         ]
@@ -57,11 +81,11 @@ def main(args):
         save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
-        train_batch_size=16,
+        train_batch_size=8,
         valid_batch_size=32,
-        gradient_accumulate_every=1,
+        gradient_accumulate_every=2,
         num_samples=valid_n,
-        results_folder="../results/mw",
+        results_folder="../results/instructPushT_conditioned",
         fp16=True,
         amp=True,
     )

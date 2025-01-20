@@ -1,0 +1,25 @@
+{
+  "workbench.colorTheme": "Default Light+",
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll": true,
+      "source.organizeImports": true
+    },
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  },
+  "notebook.formatOnSave.enabled": true,
+  "notebook.codeActionsOnSave": {
+    "notebook.source.fixAll": true,
+    "notebook.source.organizeImports": true
+  },
+  "ruff.interpreter": [
+    "/home/grislain/miniconda3/envs/avdc/bin/python"
+  ],
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": true,
+  },
+  "github.copilot.editor.enableAutoCompletions": true,
+  "terminal.integrated.defaultProfile.windows": "PowerShell",
+}
