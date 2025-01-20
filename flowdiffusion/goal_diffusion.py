@@ -1,3 +1,4 @@
+import json
 import math
 from collections import namedtuple
 from functools import partial
@@ -988,6 +989,11 @@ class Trainer(object):
 
         torch.save(data, str(self.results_folder / f"model-{milestone}.pt"))
 
+    def delete(self, milestone):
+        model_path = str(self.results_folder / f"model-{milestone}.pt")
+        if os.path.exists(model_path):
+            os.remove(model_path)
+
     def load(self, milestone):
         accelerator = self.accelerator
         device = accelerator.device
@@ -1132,20 +1138,24 @@ class Trainer(object):
                             )
                             gt_img = torch.cat([gt_first, gt_xs], dim=1)
                             gt_img = rearrange(
-                                gt_img, "b n c h w -> (b n) c h w", n=n_rows + 2
+                                gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
                             utils.save_image(
                                 gt_img,
                                 str(self.results_folder / "imgs/gt_img.png"),
-                                nrow=n_rows + 2,
+                                nrow=n_rows + 1,
                             )
+                            with open(
+                                str(self.results_folder / "imgs/gt_goal.json"), "w"
+                            ) as json_file:
+                                json.dump({"goal": label}, json_file)
 
                         os.makedirs(
                             str(self.results_folder / "imgs/outputs"), exist_ok=True
                         )
                         pred_img = torch.cat([gt_first, all_xs], dim=1)
                         pred_img = rearrange(
-                            pred_img, "b n c h w -> (b n) c h w", n=n_rows + 2
+                            pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
                         utils.save_image(
                             pred_img,
@@ -1153,10 +1163,11 @@ class Trainer(object):
                                 self.results_folder
                                 / f"imgs/outputs/sample-{milestone}.png"
                             ),
-                            nrow=n_rows + 2,
+                            nrow=n_rows + 1,
                         )
 
                         self.save(milestone)
+                        self.delete(milestone - 1)
 
                 pbar.update(1)
 
