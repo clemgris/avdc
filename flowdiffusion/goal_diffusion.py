@@ -436,10 +436,8 @@ class GoalGaussianDiffusion(nn.Module):
         self.ddim_sampling_eta = ddim_sampling_eta
 
         # helper function to register buffer from float64 to float32
-
-        register_buffer = lambda name, val: self.register_buffer(
-            name, val.to(torch.float32)
-        )
+        def register_buffer(name, val):
+            self.register_buffer(name, val.to(torch.float32))
 
         register_buffer("betas", betas)
         register_buffer("alphas_cumprod", alphas_cumprod)
@@ -956,7 +954,8 @@ class Trainer(object):
             self.ema.to(self.device)
 
         self.results_folder = Path(results_folder)
-        self.results_folder.mkdir(exist_ok=True, parents=True)
+        if not os.path.exists(self.results_folder):
+            self.results_folder.mkdir(exist_ok=True, parents=True)
 
         # step counter state
 
@@ -1134,7 +1133,7 @@ class Trainer(object):
 
                         if self.step == self.save_and_sample_every:
                             os.makedirs(
-                                str(self.results_folder / "imgs"), exist_ok=True
+                                str(self.results_folder / "val_imgs"), exist_ok=True
                             )
                             gt_img = torch.cat([gt_first, gt_xs], dim=1)
                             gt_img = rearrange(
@@ -1142,16 +1141,16 @@ class Trainer(object):
                             )
                             utils.save_image(
                                 gt_img,
-                                str(self.results_folder / "imgs/gt_img.png"),
+                                str(self.results_folder / "val_imgs/gt_img.png"),
                                 nrow=n_rows + 1,
                             )
                             with open(
-                                str(self.results_folder / "imgs/gt_goal.json"), "w"
+                                str(self.results_folder / "val_imgs/gt_goal.json"), "w"
                             ) as json_file:
                                 json.dump({"goal": label}, json_file)
 
                         os.makedirs(
-                            str(self.results_folder / "imgs/outputs"), exist_ok=True
+                            str(self.results_folder / "val_imgs/outputs"), exist_ok=True
                         )
                         pred_img = torch.cat([gt_first, all_xs], dim=1)
                         pred_img = rearrange(
@@ -1161,7 +1160,7 @@ class Trainer(object):
                             pred_img,
                             str(
                                 self.results_folder
-                                / f"imgs/outputs/sample-{milestone}.png"
+                                / f"val_imgs/outputs/sample-{milestone}.png"
                             ),
                             nrow=n_rows + 1,
                         )
