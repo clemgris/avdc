@@ -1,9 +1,12 @@
 import argparse
+import os
+from pathlib import Path
 
 from dataset import lerobotDataset
 from goal_diffusion import GoalGaussianDiffusion, Trainer
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import Subset
+from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
 
@@ -12,6 +15,8 @@ def main(args):
     valid_n = 1
     sample_per_seq = 8
     target_size = (64, 64)
+
+    results_folder = "../results/instructPushT_conditioned_1"
 
     cfg = DictConfig(
         {
@@ -22,7 +27,7 @@ def main(args):
             },
             "expert_data": {
                 "dataset_id": "lerobot/instruct_pusht_Step8_Max64_1k_video",  # "lerobot/pusht"
-                "root": "/home/grislain/AVDC/data",
+                "root": "/home/grislain/gcdp/data",
             },
             "delta_timestamps": {
                 "observation_image": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]",
@@ -34,16 +39,22 @@ def main(args):
         }
     )
 
+    results_folder = Path(results_folder)
+
+    if args.mode == "train":
+        if os.path.exists(results_folder):
+            if not args.override:
+                raise ValueError(
+                    f"Results folder {results_folder} already exists. Use --override to overwrite."
+                )
+        results_folder.mkdir(exist_ok=True, parents=True)
+
+    with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
+        file.write(OmegaConf.to_yaml(cfg))
+
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
     else:
-        # train_set = SequentialDatasetv2(
-        #     sample_per_seq=sample_per_seq,
-        #     path="../datasets/metaworld",
-        #     target_size=target_size,
-        #     randomcrop=True,
-        # )
-
         train_set = lerobotDataset(cfg)
         valid_inds = [i for i in range(0, len(train_set), len(train_set) // valid_n)][
             :valid_n
@@ -78,14 +89,14 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps=60000,
-        save_and_sample_every=2500,
+        save_and_sample_every=1,  # 000,
         ema_update_every=10,
         ema_decay=0.999,
         train_batch_size=8,
         valid_batch_size=32,
         gradient_accumulate_every=2,
         num_samples=valid_n,
-        results_folder="../results/instructPushT_conditioned",
+        results_folder=results_folder,
         fp16=True,
         amp=True,
     )
@@ -96,42 +107,60 @@ def main(args):
     if args.mode == "train":
         trainer.train()
     else:
-        from os.path import splitext
-
         import imageio
         import torch
         from PIL import Image
         from torchvision import transforms
 
+        os.makedirs(str(results_folder / "test_imgs "), exist_ok=True)
+        os.makedirs(str(results_folder / "test_imgs / outputs"), exist_ok=True)
+
         text = args.text
         guidance_weight = args.guidance_weight
         image = Image.open(args.inference_path)
+        image.save(str(results_folder / "test_imgs / test_img.png"))
+
         batch_size = 1
-        ### 231130 fixed center crop issue
         transform = transforms.Compose(
             [
-                transforms.Resize((240, 320)),
-                transforms.CenterCrop(target_size),
+                transforms.Resize(target_size),
                 transforms.ToTensor(),
             ]
         )
         image = transform(image)
-        output = trainer.sample(
-            image.unsqueeze(0), [text], batch_size, guidance_weight
-        ).cpu()
-        output = output[0].reshape(-1, 3, *target_size)
-        output = torch.cat([image.unsqueeze(0), output], dim=0)
-        root, ext = splitext(args.inference_path)
-        output_gif = root + "_out.gif"
-        output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype(
-            "uint8"
-        )
-        imageio.mimsave(output_gif, output, duration=200, loop=1000)
-        print(f"Generated {output_gif}")
+        for i in range(args.num_samples):
+            output = trainer.sample(
+                image.unsqueeze(0), [text], batch_size, guidance_weight
+            ).cpu()
+            output = output[0].reshape(-1, 3, *target_size)
+            output = torch.cat([image.unsqueeze(0), output], dim=0)
+            utils.save_image(
+                output,
+                os.path.join(
+                    str(results_folder / "test_imgs / outputs"),
+                    f"{text.replace(' ', '_')}_sample-{i}.png",
+                ),
+                nrow=sample_per_seq,
+            )
+            output_gif = os.path.join(
+                str(results_folder / "test_imgs / outputs"),
+                f"{text.replace(' ', '_')}_sample-{i}.gif",
+            )
+            output = (
+                output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255
+            ).astype("uint8")
+            imageio.mimsave(output_gif, output, duration=200, loop=1000)
+            print(f"Generated {output_gif}")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-o", "--override", type=bool, default=False
+    )  # set to True to overwrite results folder
+    parser.add_argument(
+        "-num", "--num_samples", type=int, default=1
+    )  # set to number of samples to generate
     parser.add_argument(
         "-m", "--mode", type=str, default="train", choices=["train", "inference"]
     )  # set to 'inference' to generate samples
