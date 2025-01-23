@@ -997,6 +997,10 @@ class Trainer(object):
         accelerator = self.accelerator
         device = accelerator.device
 
+        print(
+            "Downloading checkpoint from:",
+            str(self.results_folder / f"model-{milestone}.pt"),
+        )
         data = torch.load(
             str(self.results_folder / f"model-{milestone}.pt"), map_location=device
         )
@@ -1165,8 +1169,8 @@ class Trainer(object):
                             nrow=n_rows + 1,
                         )
 
+                        self.delete(milestone - 2)
                         self.save(milestone)
-                        self.delete(milestone - 1)
 
                 pbar.update(1)
 
