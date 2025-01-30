@@ -3,20 +3,28 @@ import os
 import sys
 from pathlib import Path
 
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(root_path)
+sys.path.append(
+    os.path.join(
+        root_path,
+        "flowdiffusion",
+    )
+)
+
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
 
-root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(root_path)
 sys.path.append(
     os.path.join(
         root_path,
         "calvin/calvin_models",
     )
 )
+
 from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
     CalvinDataModule,  # noqa: E402
 )
@@ -31,7 +39,7 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDataset",
@@ -114,7 +122,7 @@ def main(args):
     # breakpoint()
     unet = Unet()
 
-    pretrained_model = "openai/clip-vit-base-patch32"
+    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -141,7 +149,7 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps=60000,
-        save_and_sample_every=10,  # 000,
+        save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
         train_batch_size=4,
@@ -151,6 +159,7 @@ def main(args):
         results_folder=results_folder,
         fp16=True,
         amp=True,
+        calculate_fid=False
     )
 
     if args.checkpoint_num is not None:

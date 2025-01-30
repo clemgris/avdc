@@ -1,8 +1,17 @@
 import argparse
 import os
+import sys
 from pathlib import Path
 
-from dataset import lerobotDataset
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(root_path)
+sys.path.append(
+    os.path.join(
+        root_path,
+        "flowdiffusion",
+    )
+)
+
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import Subset
@@ -10,33 +19,24 @@ from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
 
+root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(root_path)
+from lorel.expert_dataset import ExpertDataset  # noqa: E402
+
 
 def main(args):
     valid_n = 1
-    sample_per_seq = 8
+    sample_per_seq = 10
     target_size = (64, 64)
 
-    results_folder = "../results/instructPushT_conditioned_1"
+    results_folder = "../results/lorel"
 
     cfg = DictConfig(
         {
-            "env": {"fps": 10},
-            "model": {
-                "obs_horizon": 1,
-                "pred_horizon": sample_per_seq - 1,
-            },
-            "expert_data": {
-                "dataset_id": "lerobot/instruct_pusht_Step8_Max64_1k_video",  # "lerobot/pusht"
-                "root": "/home/grislain/gcdp/data",
-            },
-            "delta_timestamps": {
-                "observation_image": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]",
-                "observation_state": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1)]",
-                "observation_next_image": "[i / ${env.fps} for i in range(1, 1 + ${model.pred_horizon})]",
-                "observation_next_state": "[i / ${env.fps} for i in range(1, 1 + ${model.pred_horizon})]",
-                "action": "[i / ${env.fps} for i in range(1 - ${model.obs_horizon}, 1 - ${model.obs_horizon} + ${model.pred_horizon})]",
-            },
-        }
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "num_data": 38225, 
+            "skip_frames": 2,
+        },
     )
 
     results_folder = Path(results_folder)
@@ -55,15 +55,48 @@ def main(args):
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
     else:
-        train_set = lerobotDataset(cfg)
+        train_set = ExpertDataset(
+            cfg.root,
+            num_trajectories=cfg.num_data,
+            use_state=False,
+            normalize_states=False,
+            skip_frames=cfg.skip_frames,
+        )
+
+        # Split train and valid
         valid_inds = [i for i in range(0, len(train_set), len(train_set) // valid_n)][
             :valid_n
         ]
         valid_set = Subset(train_set, valid_inds)
 
+        # Remove valide from train
+        all_inds = set(range(len(train_set)))
+        train_inds = list(all_inds - set(valid_inds))
+        train_set = Subset(train_set, train_inds)
+
+        print("Train data:", len(train_set))
+        print("Valid data:", len(valid_set))
+
+        ## DEBUG
+        # import torchvision
+
+        # for idx in range(len(train_set)):
+        #     x, x_cond, task = train_set[idx]
+        #     torchvision.utils.save_image(
+        #         x.reshape((7, 3, 96, 96)), f"train_img_{idx}_{task}.png"
+        #     )
+        #     if idx > 10: break
+
+        # for idx in range(len(valid_set)):
+        #     x, x_cond, task = valid_set[idx]
+        #     torchvision.utils.save_image(
+        #         x.reshape((7, 3, 96, 96)), f"valid_img_{idx}_{task}.png"
+        #     )
+        #     if idx > 10: break
+    # breakpoint()
     unet = Unet()
 
-    pretrained_model = "openai/clip-vit-base-patch32"
+    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -79,6 +112,7 @@ def main(args):
         objective="pred_v",
         beta_schedule="cosine",
         min_snr_loss_weight=True,
+        auto_normalize=True,
     )
 
     trainer = Trainer(
@@ -89,16 +123,17 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps=60000,
-        save_and_sample_every=1,  # 000,
+        save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
-        train_batch_size=8,
+        train_batch_size=4,
         valid_batch_size=32,
-        gradient_accumulate_every=2,
+        gradient_accumulate_every=4,
         num_samples=valid_n,
         results_folder=results_folder,
         fp16=True,
         amp=True,
+        calculate_fid=False
     )
 
     if args.checkpoint_num is not None:

@@ -3,6 +3,15 @@ import os
 import sys
 from pathlib import Path
 
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(root_path)
+sys.path.append(
+    os.path.join(
+        root_path,
+        "flowdiffusion",
+    )
+)
+
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import Subset
@@ -24,7 +33,8 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "num_data": 38225, 
             "skip_frames": 2,
         },
     )
@@ -47,7 +57,7 @@ def main(args):
     else:
         train_set = ExpertDataset(
             cfg.root,
-            num_trajectories=500,
+            num_trajectories=cfg.num_data,
             use_state=False,
             normalize_states=False,
             skip_frames=cfg.skip_frames,
@@ -86,7 +96,7 @@ def main(args):
     # breakpoint()
     unet = Unet()
 
-    pretrained_model = "openai/clip-vit-base-patch32"
+    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -113,7 +123,7 @@ def main(args):
         valid_set=valid_set,
         train_lr=1e-4,
         train_num_steps=60000,
-        save_and_sample_every=1000,
+        save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
         train_batch_size=4,
@@ -123,6 +133,7 @@ def main(args):
         results_folder=results_folder,
         fp16=True,
         amp=True,
+        calculate_fid=False
     )
 
     if args.checkpoint_num is not None:
