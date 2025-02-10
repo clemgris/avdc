@@ -12,6 +12,7 @@ sys.path.append(
     )
 )
 
+import torch
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import Subset
@@ -23,18 +24,21 @@ root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_path)
 from lorel.expert_dataset import ExpertDataset  # noqa: E402
 
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"Total GPUs available: {torch.cuda.device_count()}")
+
 
 def main(args):
     valid_n = 1
     sample_per_seq = 10
     target_size = (64, 64)
 
-    results_folder = "../results/lorel"
+    results_folder = "../results_debug/lorel"
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
-            "num_data": 38225, 
+            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "num_data": 100,  # 38225,
             "skip_frames": 2,
         },
     )
@@ -96,7 +100,10 @@ def main(args):
     # breakpoint()
     unet = Unet()
 
-    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    pretrained_model = (
+        "openai/clip-vit-base-patch32"
+        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -133,7 +140,7 @@ def main(args):
         results_folder=results_folder,
         fp16=True,
         amp=True,
-        calculate_fid=False
+        calculate_fid=False,
     )
 
     if args.checkpoint_num is not None:
@@ -147,10 +154,12 @@ def main(args):
         from PIL import Image
         from torchvision import transforms
 
-        os.makedirs(str(results_folder / "test_imgs "), exist_ok=True)
-        os.makedirs(str(results_folder / "test_imgs / outputs"), exist_ok=True)
-
         text = args.text
+        os.makedirs(
+            str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
+            exist_ok=True,
+        )
+
         guidance_weight = args.guidance_weight
         image = Image.open(args.inference_path)
         image.save(str(results_folder / "test_imgs / test_img.png"))
@@ -172,13 +181,16 @@ def main(args):
             utils.save_image(
                 output,
                 os.path.join(
-                    str(results_folder / "test_imgs / outputs"),
+                    str(
+                        results_folder
+                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                    ),
                     f"{text.replace(' ', '_')}_sample-{i}.png",
                 ),
                 nrow=sample_per_seq,
             )
             output_gif = os.path.join(
-                str(results_folder / "test_imgs / outputs"),
+                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
                 f"{text.replace(' ', '_')}_sample-{i}.gif",
             )
             output = (

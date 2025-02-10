@@ -1,7 +1,7 @@
 import argparse
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -26,7 +26,7 @@ def main(args):
     sample_per_seq = 8
     target_size = (64, 64)
 
-    results_folder = "../results/instructPushT_conditioned"
+    results_folder = "../results_JZ/instructPushT_conditioned"
 
     cfg = DictConfig(
         {
@@ -81,7 +81,10 @@ def main(args):
 
     unet = Unet()
 
-    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    pretrained_model = (
+        "openai/clip-vit-base-patch32"
+        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -117,7 +120,7 @@ def main(args):
         results_folder=results_folder,
         fp16=True,
         amp=True,
-        calculate_fid=False
+        calculate_fid=False,
     )
 
     if args.checkpoint_num is not None:

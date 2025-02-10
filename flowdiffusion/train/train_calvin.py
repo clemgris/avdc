@@ -35,7 +35,7 @@ def main(args):
     sample_per_seq = 8
     target_size = (96, 96)
 
-    results_folder = "../results/calvin"
+    results_folder = "../results_JZ/calvin"
 
     cfg = DictConfig(
         {
@@ -80,7 +80,8 @@ def main(args):
     data_module = CalvinDataModule(
         cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
     )
-    data_module.setup()
+    if args.mode == "train":
+        data_module.setup()
     results_folder = Path(results_folder)
 
     if args.mode == "train":
@@ -122,7 +123,10 @@ def main(args):
     # breakpoint()
     unet = Unet()
 
-    pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    pretrained_model = (
+        "openai/clip-vit-base-patch32"
+        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+    )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -159,7 +163,7 @@ def main(args):
         results_folder=results_folder,
         fp16=True,
         amp=True,
-        calculate_fid=False
+        calculate_fid=False,
     )
 
     if args.checkpoint_num is not None:
@@ -173,12 +177,14 @@ def main(args):
         from PIL import Image
         from torchvision import transforms
 
-        os.makedirs(str(results_folder / "test_imgs "), exist_ok=True)
-        os.makedirs(str(results_folder / "test_imgs / outputs"), exist_ok=True)
-
         text = args.text
+        os.makedirs(
+            str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
+            exist_ok=True,
+        )
+
         guidance_weight = args.guidance_weight
-        image = Image.open(args.inference_path)
+        image = Image.open(args.inference_path).convert("RGB")
         image.save(str(results_folder / "test_imgs / test_img.png"))
 
         batch_size = 1
@@ -186,6 +192,7 @@ def main(args):
             [
                 transforms.Resize(target_size),
                 transforms.ToTensor(),
+                transforms.Normalize(mean=[0.5], std=[0.5]),
             ]
         )
         image = transform(image)
@@ -193,18 +200,25 @@ def main(args):
             output = trainer.sample(
                 image.unsqueeze(0), [text], batch_size, guidance_weight
             ).cpu()
+
+            # Unnormalize
+            output = output * 0.5 + 0.5
+
             output = output[0].reshape(-1, 3, *target_size)
-            output = torch.cat([image.unsqueeze(0), output], dim=0)
+            output = torch.cat([image.unsqueeze(0) * 0.5 + 0.5, output], dim=0)
             utils.save_image(
                 output,
                 os.path.join(
-                    str(results_folder / "test_imgs / outputs"),
+                    str(
+                        results_folder
+                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                    ),
                     f"{text.replace(' ', '_')}_sample-{i}.png",
                 ),
                 nrow=sample_per_seq,
             )
             output_gif = os.path.join(
-                str(results_folder / "test_imgs / outputs"),
+                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
                 f"{text.replace(' ', '_')}_sample-{i}.gif",
             )
             output = (
