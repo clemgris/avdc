@@ -3,3 +3,5 @@ lerobot
 __pycache__
 calvin/dataset
 lorel/data
+ipynb_checkpoints
+results_*
