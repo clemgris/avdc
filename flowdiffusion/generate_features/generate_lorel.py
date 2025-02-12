@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -25,10 +25,6 @@ from lorel.expert_dataset import ImageDataset  # noqa: E402
 
 
 def main(args):
-    data_folder = "../data_features/lorel"
-    data_folder = Path(data_folder)
-    data_filename = data_folder.stem
-
     cfg = DictConfig(
         {
             "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
@@ -37,22 +33,9 @@ def main(args):
     )
 
     data_filename = Path(cfg.root).stem
+    folder_name = Path(cfg.root).parent.name
 
-    if os.path.exists(data_folder):
-        if not args.override:
-            raise ValueError(
-                f"Data folder {data_folder} already exists. Use --override to overwrite."
-            )
-    data_folder.mkdir(parents=True, exist_ok=True)
-    (data_folder / data_filename / "training").mkdir(parents=True, exist_ok=True)
-    with open(
-        os.path.join(data_folder, data_filename, "data_config.yaml"), "w"
-    ) as file:
-        file.write(OmegaConf.to_yaml(cfg))
-
-    print("Data folder:", data_folder / data_filename)
-
-    data_folder = Path(data_folder)
+    print("Data folder:", folder_name / data_filename)
 
     train_set = ImageDataset(cfg.root, num_trajectories=cfg.num_data, use_state=False)
 
@@ -61,7 +44,7 @@ def main(args):
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=2,
+        batch_size=1,
         shuffle=True,
         num_workers=4,
         pin_memory=True,
@@ -88,7 +71,7 @@ def main(args):
     # Save features
     torch.save(
         all_emb,
-        data_folder / data_filename / f"training/{args.features}_features.pth",
+        folder_name / data_filename / f"{args.features}_features.pth",
     )
 
 

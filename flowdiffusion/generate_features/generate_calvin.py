@@ -1,8 +1,10 @@
 import argparse
 import os
+import pickle
 import sys
 from pathlib import Path
 
+import numpy as np
 import torch
 import torchvision.transforms as T  # noqa: F401
 from omegaconf import DictConfig, OmegaConf
@@ -33,13 +35,9 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 
 
 def main(args):
-    data_folder = "../data_features/calvin"
-    data_folder = Path(data_folder)
-    data_filename = data_folder.name
-
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",  # "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -71,8 +69,6 @@ def main(args):
         }
     )
 
-    data_filename = Path(cfg.root).name
-
     transforms = OmegaConf.load(
         os.path.join(
             root_path,
@@ -80,20 +76,10 @@ def main(args):
         )
     )
 
-    if os.path.exists(data_folder):
-        if not args.override:
-            raise ValueError(
-                f"Data folder {data_folder} already exists. Use --override to overwrite."
-            )
-    data_folder.mkdir(exist_ok=True, parents=True)
-    (data_folder / data_filename / "training").mkdir(parents=True, exist_ok=True)
-    (data_folder / data_filename / "validation").mkdir(parents=True, exist_ok=True)
-    with open(
-        os.path.join(data_folder, data_filename, "data_config.yaml"), "w"
-    ) as file:
+    os.makedirs(os.path.join(cfg.root, "training/features"), exist_ok=True)
+    os.makedirs(os.path.join(cfg.root, "validation/features"), exist_ok=True)
+    with open(os.path.join(cfg.root, "dino_feat_config.yaml"), "w") as file:
         file.write(OmegaConf.to_yaml(cfg))
-
-    print("Data folder:", data_folder / data_filename)
 
     data_module = CalvinDataModule(
         cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
@@ -110,8 +96,8 @@ def main(args):
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=2,
-        shuffle=True,
+        batch_size=1,
+        shuffle=False,
         num_workers=4,
         pin_memory=True,
         drop_last=True,
@@ -119,7 +105,7 @@ def main(args):
 
     valid_loader = torch.utils.data.DataLoader(
         valid_set,
-        batch_size=2,
+        batch_size=1,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -129,39 +115,42 @@ def main(args):
     # Frozen encoder model
     if args.features == "dino":
         encoder_model = DinoV2Encoder(
-            name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base"
+            name="facebook/dinov2-base",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base"
         )
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
-    all_emb = {"cls_emb": [], "patch_emb": []}
-    for image in tqdm(
+    all_emb = {"cls_emb": [], "patch_emb": [], "frame_idx": []}
+    for data in tqdm(
         train_loader, desc=f"Generate {args.features} features of training data"
     ):
+        frame_idx, image = data
         cls_emb, patch_emb = encoder_model(image)
 
-        all_emb["cls_emb"].append(cls_emb)
-        all_emb["patch_emb"].append(patch_emb)
+        all_emb["cls_emb"].append(np.array(cls_emb.cpu()))
+        all_emb["patch_emb"].append(np.array(patch_emb.cpu()))
+        all_emb["frame_idx"].append(frame_idx.cpu().item())
 
-    # Save features
-    torch.save(
-        all_emb,
-        data_folder / data_filename / f"training/{args.features}_features.pth",
-    )
+    # Save as pickle
+    with open(
+        Path(cfg.root) / f"training/features/{args.features}_features.pkl", "wb"
+    ) as f:
+        pickle.dump(all_emb, f)
 
-    all_eval_emb = {"cls_emb": [], "patch_emb": []}
-    for image in tqdm(
+    all_eval_emb = {"cls_emb": [], "patch_emb": [], "frame_idx": []}
+    for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
     ):
+        frame_idx, image = data
         cls_emb, patch_emb = encoder_model(image)
-        all_eval_emb["cls_emb"].append(cls_emb)
-        all_eval_emb["patch_emb"].append(patch_emb)
+        all_eval_emb["cls_emb"].append(np.array(cls_emb.cpu()))
+        all_eval_emb["patch_emb"].append(np.array(patch_emb.cpu()))
+        all_eval_emb["frame_idx"].append(frame_idx.cpu().item())
 
-    # Save features
-    torch.save(
-        all_eval_emb,
-        data_folder / data_filename / f"validation/{args.features}_features.pth",
-    )
+    with open(
+        Path(cfg.root) / f"validation/features/{args.features}_features.pkl", "wb"
+    ) as f:
+        pickle.dump(all_eval_emb, f)
 
 
 if __name__ == "__main__":
