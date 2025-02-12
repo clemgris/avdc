@@ -68,6 +68,32 @@ def _pad_with_repetition(input_tensor: torch.Tensor, pad_size: int) -> torch.Ten
     return padded
 
 
+class ImageDataset(Dataset):
+    def __init__(
+        self,
+        expert_location: str,
+        num_trajectories: int = 1,
+        seed: int = 0,
+        transform=None,
+        **kwargs,
+    ):
+        all_trajectories = load_trajectories(
+            expert_location, num_trajectories, seed, **kwargs
+        )["states"]
+        all_images = np.concatenate(all_trajectories)
+        self.images = all_images
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        image = self.images[idx]
+        if self.transform:
+            image = self.transform(image)
+        return image
+
+
 class ExpertDataset(Dataset):
     """Dataset for expert trajectories.
     Assumes expert dataset is a dict with keys {states, actions, rewards, lengths} with values
