@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 
 import torch
-import torchvision.transforms as T  # noqa: F401
+from omegaconf import DictConfig, OmegaConf
+from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -20,32 +21,36 @@ root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_path)
 import argparse
 
-from omegaconf import DictConfig
-from tqdm import tqdm
-
 from lorel.expert_dataset import ImageDataset  # noqa: E402
 
 
 def main(args):
-    target_size = (64, 64)
-
     data_folder = "../data_features/lorel"
     data_folder = Path(data_folder)
+    data_filename = data_folder.stem
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl", #"/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl"
-            "num_data": 10,  # 38225,
+            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "num_data": 3,  # 38225,
         },
     )
+
+    data_filename = Path(cfg.root).stem
 
     if os.path.exists(data_folder):
         if not args.override:
             raise ValueError(
-                f"Results folder {data_folder} already exists. Use --override to overwrite."
+                f"Data folder {data_folder} already exists. Use --override to overwrite."
             )
     data_folder.mkdir(parents=True, exist_ok=True)
-    (data_folder / "training").mkdir(parents=True, exist_ok=True)
+    (data_folder / data_filename / "training").mkdir(parents=True, exist_ok=True)
+    with open(
+        os.path.join(data_folder, data_filename, "data_config.yaml"), "w"
+    ) as file:
+        file.write(OmegaConf.to_yaml(cfg))
+
+    print("Data folder:", data_folder / data_filename)
 
     data_folder = Path(data_folder)
 
@@ -65,7 +70,9 @@ def main(args):
 
     # Frozen encoder model
     if args.features == "dino":
-        encoder_model = DinoV2Encoder(name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base")
+        encoder_model = DinoV2Encoder(
+            name="facebook/dinov2-base",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base"
+        )
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
@@ -81,7 +88,7 @@ def main(args):
     # Save features
     torch.save(
         all_emb,
-        data_folder / f"training/{args.features}_features.pth",
+        data_folder / data_filename / f"training/{args.features}_features.pth",
     )
 
 

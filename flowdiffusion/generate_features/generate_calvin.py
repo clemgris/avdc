@@ -33,14 +33,13 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 
 
 def main(args):
-    target_size = (96, 96)
-
     data_folder = "../data_features/calvin"
     data_folder = Path(data_folder)
+    data_filename = data_folder.name
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D", # "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",  # "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -72,6 +71,8 @@ def main(args):
         }
     )
 
+    data_filename = Path(cfg.root).name
+
     transforms = OmegaConf.load(
         os.path.join(
             root_path,
@@ -85,27 +86,20 @@ def main(args):
                 f"Data folder {data_folder} already exists. Use --override to overwrite."
             )
     data_folder.mkdir(exist_ok=True, parents=True)
-    (data_folder / "training").mkdir(parents=True, exist_ok=True)
-    (data_folder / "validation").mkdir(parents=True, exist_ok=True)
+    (data_folder / data_filename / "training").mkdir(parents=True, exist_ok=True)
+    (data_folder / data_filename / "validation").mkdir(parents=True, exist_ok=True)
+    with open(
+        os.path.join(data_folder, data_filename, "data_config.yaml"), "w"
+    ) as file:
+        file.write(OmegaConf.to_yaml(cfg))
 
-    data_folder = Path(data_folder)
+    print("Data folder:", data_folder / data_filename)
 
     data_module = CalvinDataModule(
         cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
     )
 
     data_module.setup()
-    data_folder = Path(data_folder)
-
-    if os.path.exists(data_folder):
-        if not args.override:
-            raise ValueError(
-                f"Results folder {data_folder} already exists. Use --override to overwrite."
-            )
-    data_folder.mkdir(exist_ok=True, parents=True)
-
-    with open(os.path.join(data_folder, "data_config.yaml"), "w") as file:
-        file.write(OmegaConf.to_yaml(cfg))
 
     train_set = data_module.train_datasets["lang"]
     valid_set = data_module.val_datasets["lang"]
@@ -134,7 +128,9 @@ def main(args):
 
     # Frozen encoder model
     if args.features == "dino":
-        encoder_model = DinoV2Encoder(name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base")
+        encoder_model = DinoV2Encoder(
+            name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base"
+        )
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
@@ -150,7 +146,7 @@ def main(args):
     # Save features
     torch.save(
         all_emb,
-        data_folder / f"training/{args.features}_features.pth",
+        data_folder / data_filename / f"training/{args.features}_features.pth",
     )
 
     all_eval_emb = {"cls_emb": [], "patch_emb": []}
@@ -164,7 +160,7 @@ def main(args):
     # Save features
     torch.save(
         all_eval_emb,
-        data_folder / f"validation/{args.features}_features.pth",
+        data_folder / data_filename / f"validation/{args.features}_features.pth",
     )
 
 
