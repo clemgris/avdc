@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
-
 from calvin_agent.datasets.base_dataset import BaseDataset
+from calvin_agent.datasets.utils.episode_utils import process_rgb
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +162,138 @@ class DiskDataset(BaseDataset):
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
         lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_lookup = []
+        for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
+            assert end_idx >= self.max_window_size
+            lang_lookup.append(i)
+            episode_lookup.append((start_idx, end_idx))
+
+        return np.array(episode_lookup), lang_lookup, lang_ann
+
+
+class DiskImageDataset(BaseDataset):
+    """
+    Dataset that loads individual images from episodes while ensuring each image is seen once per epoch.
+
+    Args:
+        skip_frames: Step size for skipping frames in a trajectory.
+        save_format: File format in datasets_dir (pkl or npz).
+        pretrain: Set to True when pretraining.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        skip_frames: int = 1,
+        save_format: str = "npz",
+        pretrain: bool = False,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self.save_format = save_format
+        if self.save_format == "pkl":
+            self.load_file = load_pkl
+        elif self.save_format == "npz":
+            self.load_file = load_npz
+        else:
+            raise NotImplementedError
+
+        self.pretrain = pretrain
+        self.skip_frames = skip_frames
+
+        if self.with_lang:
+            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+                self._build_file_indices_lang(self.abs_datasets_dir)
+            )
+        else:
+            self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
+
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
+        )
+
+        # Precompute all (trajectory, frame) index pairs for exact coverage
+        self.image_indices = self._generate_image_indices()
+
+    def _get_episode_name(self, file_idx: int) -> Path:
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
+
+    def _generate_image_indices(self) -> List[Tuple[int, int]]:
+        """
+        Generates a list of (episode_idx, frame_idx) pairs to ensure every image is seen once per epoch.
+        """
+        image_indices = []
+        for episode_idx, (start_idx, end_idx) in enumerate(self.episode_lookup):
+            frames = np.arange(start_idx, end_idx + 1, self.skip_frames)
+            image_indices.extend([(episode_idx, frame) for frame in frames])
+
+        return image_indices
+
+    def __len__(self) -> int:
+        return len(self.image_indices)
+
+    def __getitem__(self, index: int) -> Dict[str, np.ndarray]:
+        """
+        Returns a single image from a trajectory.
+
+        Args:
+            index: Index in the precomputed list of (episode, frame) pairs.
+        Returns:
+            sample: Dict containing a single image frame.
+        """
+        episode_idx, frame_idx = self.image_indices[index]
+
+        keys = list(chain(*self.observation_space.values()))
+        keys.remove("language")
+        keys.append("scene_obs")
+
+        episode = self.load_file(self._get_episode_name(frame_idx))
+
+        sample = {key: episode[key] for key in keys}
+        rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
+
+        return rgb_obs["rgb_obs"]["rgb_static"].squeeze(0)
+
+    def _build_file_indices_lang(
+        self, abs_datasets_dir: Path
+    ) -> Tuple[np.ndarray, List, np.ndarray]:
+        """
+        Builds mapping from index to file_name for loading individual images.
+
+        Args:
+            abs_datasets_dir: Absolute path of the dataset directory.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+            lang_lookup: Mapping from training example index to language instruction.
+            lang_ann: Language tasks.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        episode_lookup = []
+
+        try:
+            print(
+                "Trying to load lang data from: ",
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                allow_pickle=True,
+            ).item()
+        except Exception:
+            print(
+                "Exception, trying to load lang data from: ",
+                abs_datasets_dir / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+            ).item()
+
+        ep_start_end_ids = lang_data["info"]["indx"]
+        lang_ann = lang_data["language"]["task"]
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size

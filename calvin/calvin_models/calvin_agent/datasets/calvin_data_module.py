@@ -6,16 +6,15 @@ import hydra
 import numpy as np
 import pytorch_lightning as pl
 import torchvision
-from omegaconf import DictConfig, OmegaConf
-from pytorch_lightning.trainer.supporters import CombinedLoader
-from torch.utils.data import DataLoader
-
 from calvin_agent.datasets.utils.episode_utils import load_dataset_statistics
 from calvin_agent.datasets.utils.shared_memory_utils import (
     SharedMemoryLoader,
     load_shm_lookup,
     save_shm_lookup,
 )
+from omegaconf import DictConfig, OmegaConf
+from pytorch_lightning.trainer.supporters import CombinedLoader
+from torch.utils.data import DataLoader
 
 logger = logging.getLogger(__name__)
 DEFAULT_TRANSFORM = OmegaConf.create({"train": None, "val": None})
