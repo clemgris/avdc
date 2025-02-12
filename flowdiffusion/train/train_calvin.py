@@ -17,6 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
+import torch
 
 sys.path.append(
     os.path.join(
@@ -29,13 +30,16 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
     CalvinDataModule,  # noqa: E402
 )
 
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"Total GPUs available: {torch.cuda.device_count()}")
+
 
 def main(args):
     valid_n = 1
     sample_per_seq = 8
     target_size = (96, 96)
 
-    results_folder = "../results_JZ/calvin"
+    results_folder = "../results/calvin"
 
     cfg = DictConfig(
         {
@@ -124,8 +128,8 @@ def main(args):
     unet = Unet()
 
     pretrained_model = (
-        "openai/clip-vit-base-patch32"
-        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        # "openai/clip-vit-base-patch32"
+        "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
@@ -156,9 +160,9 @@ def main(args):
         save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
-        train_batch_size=4,
+        train_batch_size=16,
         valid_batch_size=32,
-        gradient_accumulate_every=4,
+        gradient_accumulate_every=1,
         num_samples=valid_n,
         results_folder=results_folder,
         fp16=True,

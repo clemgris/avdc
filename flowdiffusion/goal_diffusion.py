@@ -879,8 +879,12 @@ class Trainer(object):
             split_batches=split_batches, mixed_precision="fp16" if fp16 else "no"
         )
 
+<<<<<<< Updated upstream
         if self.accelerator.is_main_process:
             print(f"Using {self.accelerator.num_processes} GPUs")
+=======
+        print(f'Using {self.accelerator.num_processes} GPUs')
+>>>>>>> Stashed changes
 
         self.accelerator.native_amp = amp
 

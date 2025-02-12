@@ -33,11 +33,11 @@ def main(args):
     sample_per_seq = 10
     target_size = (64, 64)
 
-    results_folder = "../results_debug/lorel"
+    results_folder = "../results/lorel"
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl", # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl"
             "num_data": 100,  # 38225,
             "skip_frames": 2,
         },
@@ -101,8 +101,8 @@ def main(args):
     unet = Unet()
 
     pretrained_model = (
-        "openai/clip-vit-base-patch32"
-        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        # "openai/clip-vit-base-patch32"
+        "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
@@ -133,9 +133,9 @@ def main(args):
         save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
-        train_batch_size=4,
+        train_batch_size=16,
         valid_batch_size=32,
-        gradient_accumulate_every=4,
+        gradient_accumulate_every=1,
         num_samples=valid_n,
         results_folder=results_folder,
         fp16=True,
