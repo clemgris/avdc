@@ -879,6 +879,9 @@ class Trainer(object):
             split_batches=split_batches, mixed_precision="fp16" if fp16 else "no"
         )
 
+        if self.accelerator.is_main_process:
+            print(f"Using {self.accelerator.num_processes} GPUs")
+
         self.accelerator.native_amp = amp
 
         # model
@@ -887,7 +890,8 @@ class Trainer(object):
         self.num_params = sum(
             p.numel() for p in self.model.parameters() if p.requires_grad
         )
-        print(f"Number of parameters: {self.num_params}")
+        if self.accelerator.is_main_process:
+            print(f"Number of parameters: {self.num_params}")
 
         self.channels = channels
 
