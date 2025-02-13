@@ -9,6 +9,7 @@ from calvin_agent.datasets.utils.episode_utils import (
     get_state_info_dict,
     process_actions,
     process_depth,
+    process_features,
     process_language,
     process_rgb,
     process_state,
@@ -73,11 +74,13 @@ class BaseDataset(Dataset):
         max_window_size: int = 32,
         pad: bool = True,
         aux_lang_loss_window: int = 1,
+        with_dino_feat: bool = False,
     ):
         self.observation_space = obs_space
         self.proprio_state = proprio_state
         self.transforms = transforms
         self.with_lang = key == "lang"
+        self.with_dino_feat = with_dino_feat
         self.relative_actions = "rel_actions" in self.observation_space["actions"]
 
         self.pad = pad
@@ -113,10 +116,22 @@ class BaseDataset(Dataset):
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
         images = sequence["rgb_obs"]["rgb_static"]  # ["rgb_gripper"]
-        x_cond = images[0, ...]
-        x = images[1:, ...]
-        x_cond = x_cond.squeeze(0)
-        x = rearrange(x, "f c h w -> (f c) h w")
+        dino_features = sequence["dino_features"]
+
+        if self.with_dino_feat:
+            x_cond = dino_features[0]
+            x_cond = rearrange(x_cond, "f wh c -> f c wh")
+            x_cond = rearrange(x_cond, "f c (w h) -> f c w h", w=16, h=16)
+
+            x = dino_features[1:].squeeze(1)
+            x = rearrange(x, "f wh c -> f c wh")
+            x = rearrange(x, "f c (w h) -> f c w h", w=16, h=16)
+            x = rearrange(x, "f c h w -> (f c) h w")
+        else:
+            x_cond = images[0, ...]
+            x = images[1:, ...]
+            x_cond = x_cond.squeeze(0)
+            x = rearrange(x, "f c h w -> (f c) h w")
         task = sequence["lang"]
         return x, x_cond, task
 
@@ -141,6 +156,7 @@ class BaseDataset(Dataset):
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
+        seq_feat = process_features(episode, self.transforms, self.with_dino_feat)
         seq_dict = {
             **seq_state_obs,
             **seq_rgb_obs,
@@ -148,6 +164,7 @@ class BaseDataset(Dataset):
             **seq_acts,
             **info,
             **seq_lang,
+            **seq_feat,
         }  # type:ignore
         seq_dict["idx"] = idx  # type:ignore
 

@@ -84,6 +84,11 @@ class DiskDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
+        if self.with_dino_feat:
+            self.dino_feat, self.dino_feat_lookup = self._build_file_indices_features(
+                self.abs_datasets_dir
+            )
+
         self.naming_pattern, self.n_digits = lookup_naming_pattern(
             self.abs_datasets_dir, self.save_format
         )
@@ -119,9 +124,15 @@ class DiskDataset(BaseDataset):
             for file_idx in episodes_idx
         ]
 
+        feat_idx = []
+        for ii in episodes_idx:
+            feat_idx.append(self.dino_feat_lookup[ii])
+
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+        if self.with_dino_feat:
+            episode["dino_features"] = [self.dino_feat[ii] for ii in feat_idx]
         return episode
 
     def _build_file_indices_lang(
@@ -142,6 +153,7 @@ class DiskDataset(BaseDataset):
 
         episode_lookup = []
 
+        # Load lang data from pickle
         try:
             print(
                 "trying to load lang data from: ",
@@ -169,6 +181,38 @@ class DiskDataset(BaseDataset):
             episode_lookup.append((start_idx, end_idx))
 
         return np.array(episode_lookup), lang_lookup, lang_ann
+
+    def _build_file_indices_features(
+        self, abs_datasets_dir: Path
+    ) -> Tuple[np.ndarray, List, np.ndarray]:
+        """
+        This method builds the mapping from index to dino features.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            feature_lookup: Mapping from training example to index of dino features.
+            features: features.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        # Load dino features from pickle
+        try:
+            print(
+                "trying to load dino_features from: ",
+                abs_datasets_dir / "features/dino_features.pkl",
+            )
+            dino_feat = load_pkl(abs_datasets_dir / "features/dino_features.pkl")
+        except Exception:
+            print(
+                "Exception, trying to load dino_features from: ",
+                abs_datasets_dir / "dino_features.pkl",
+            )
+            dino_feat = load_pkl(abs_datasets_dir / "dino_features.pkl")
+        dino_feat_lookup = {k: i for i, k in enumerate(dino_feat["frame_idx"])}
+
+        return dino_feat["patch_emb"], dino_feat_lookup
 
 
 class DiskImageDataset(BaseDataset):
@@ -254,7 +298,7 @@ class DiskImageDataset(BaseDataset):
         sample = {key: episode[key] for key in keys}
         rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
 
-        return rgb_obs["rgb_obs"]["rgb_static"].squeeze(0)
+        return frame_idx, rgb_obs["rgb_obs"]["rgb_static"].squeeze(0)
 
     def _build_file_indices_lang(
         self, abs_datasets_dir: Path

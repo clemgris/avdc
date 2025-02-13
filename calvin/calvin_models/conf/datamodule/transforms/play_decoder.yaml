@@ -68,9 +68,6 @@ val:
     - _target_: torchvision.transforms.Resize
       size: 96
     - _target_: calvin_agent.utils.transforms.ScaleImageTensor
-    - _target_: torchvision.transforms.Normalize
-      mean: [0.5,]
-      std: [0.5,]
   rgb_gripper:
     - _target_: torchvision.transforms.Resize
       size: 84
