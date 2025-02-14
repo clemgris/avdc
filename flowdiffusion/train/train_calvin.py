@@ -12,12 +12,12 @@ sys.path.append(
     )
 )
 
+import torch
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
-import torch
 
 sys.path.append(
     os.path.join(
@@ -37,13 +37,12 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 def main(args):
     valid_n = 1
     sample_per_seq = 8
-    target_size = (96, 96)
 
-    results_folder = "../results/calvin"
+    results_folder = "../results_debug_dino/calvin"
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
+            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDataset",
@@ -70,14 +69,21 @@ def main(args):
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
+                    "diffuse_on": "pixel",
                 },
             },
         }
     )
 
+    if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+        target_size = (16, 16)
+    else:
+        target_size = (96, 96)
+
     transforms = OmegaConf.load(
         os.path.join(
-            root_path, "calvin/calvin_models/conf/datamodule/transforms/play_basic.yaml"
+            root_path,
+            "calvin/calvin_models/conf/datamodule/transforms/play_decoder.yaml",  ## DEBUG
         )
     )
 
@@ -124,12 +130,13 @@ def main(args):
         #         x.reshape((7, 3, 96, 96)), f"valid_img_{idx}_{task}.png"
         #     )
         #     if idx > 10: break
-    # breakpoint()
+        # breakpoint()
+
     unet = Unet()
 
     pretrained_model = (
-        # "openai/clip-vit-base-patch32"
-        "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        "openai/clip-vit-base-patch32"
+        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)

@@ -22,7 +22,7 @@ from unet import UnetMW as Unet
 
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_path)
-from lorel.expert_dataset import ExpertDataset  # noqa: E402
+from lorel.expert_dataset import ExpertDataset, ExpertTrainDataset  # noqa: E402, F401
 
 print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"Total GPUs available: {torch.cuda.device_count()}")
@@ -31,17 +31,22 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 def main(args):
     valid_n = 1
     sample_per_seq = 10
-    target_size = (64, 64)
 
-    results_folder = "../results/lorel"
+    results_folder = "../results_debug_dino/lorel"
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl", # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl"
-            "num_data": 100,  # 38225,
+            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
             "skip_frames": 2,
+            "diffuse_on": "pixel",
+            "num_data": 100,  # 38225,
         },
     )
+
+    if cfg.diffuse_on == "dino_feat":
+        target_size = (16, 16)
+    else:
+        target_size = (64, 64)
 
     results_folder = Path(results_folder)
 
@@ -59,12 +64,15 @@ def main(args):
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
     else:
-        train_set = ExpertDataset(
-            cfg.root,
-            num_trajectories=cfg.num_data,
-            use_state=False,
-            normalize_states=False,
-            skip_frames=cfg.skip_frames,
+        # train_set = ExpertDataset(
+        #     cfg.root,
+        #     num_trajectories=cfg.num_data,
+        #     use_state=False,
+        #     normalize_states=False,
+        #     skip_frames=cfg.skip_frames,
+        # )
+        train_set = ExpertTrainDataset(
+            cfg.root, skip_frames=cfg.skip_frames, diffuse_on=cfg.diffuse_on
         )
 
         # Split train and valid
@@ -97,12 +105,13 @@ def main(args):
         #         x.reshape((7, 3, 96, 96)), f"valid_img_{idx}_{task}.png"
         #     )
         #     if idx > 10: break
+
     # breakpoint()
     unet = Unet()
 
     pretrained_model = (
-        # "openai/clip-vit-base-patch32"
-        "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        "openai/clip-vit-base-patch32"
+        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
     )
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
