@@ -1,6 +1,5 @@
 import argparse
 import os
-import pickle
 import sys
 from pathlib import Path
 
@@ -90,8 +89,8 @@ def main(args):
     train_set = data_module.train_datasets["lang"]
     valid_set = data_module.val_datasets["lang"]
 
-    print("Train data:", len(train_set))
-    print("Valid data:", len(valid_set))
+    print("Train data (img):", len(train_set))
+    print("Valid data (img):", len(valid_set))
 
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
@@ -120,37 +119,40 @@ def main(args):
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
-    all_emb = {"cls_emb": [], "patch_emb": [], "frame_idx": []}
     for data in tqdm(
         train_loader, desc=f"Generate {args.features} features of training data"
     ):
+        all_emb = {}
         frame_idx, image = data
         cls_emb, patch_emb = encoder_model(image)
 
-        all_emb["cls_emb"].append(np.array(cls_emb.cpu()))
-        all_emb["patch_emb"].append(np.array(patch_emb.cpu()))
-        all_emb["frame_idx"].append(frame_idx.cpu().item())
+        all_emb["cls_emb"] = np.array(cls_emb.cpu())
+        all_emb["patch_emb"] = np.array(patch_emb.cpu())
+        all_emb["frame_idx"] = frame_idx.cpu().item()
 
-    # Save as pickle
-    with open(
-        Path(cfg.root) / f"training/features/{args.features}_features.pkl", "wb"
-    ) as f:
-        pickle.dump(all_emb, f)
+        # Save as npz
+        np.savez(
+            Path(cfg.root)
+            / f"training/features/{args.features}_features_{all_emb['frame_idx']}.npz",
+            **all_emb,
+        )
 
-    all_eval_emb = {"cls_emb": [], "patch_emb": [], "frame_idx": []}
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
     ):
+        eval_emb = {}
         frame_idx, image = data
         cls_emb, patch_emb = encoder_model(image)
-        all_eval_emb["cls_emb"].append(np.array(cls_emb.cpu()))
-        all_eval_emb["patch_emb"].append(np.array(patch_emb.cpu()))
-        all_eval_emb["frame_idx"].append(frame_idx.cpu().item())
+        eval_emb["cls_emb"] = np.array(cls_emb.cpu())
+        eval_emb["patch_emb"] = np.array(patch_emb.cpu())
+        eval_emb["frame_idx"] = frame_idx.cpu().item()
 
-    with open(
-        Path(cfg.root) / f"validation/features/{args.features}_features.pkl", "wb"
-    ) as f:
-        pickle.dump(all_eval_emb, f)
+        # save as npz
+        np.savez(
+            Path(cfg.root)
+            / f"validation/features/{args.features}_features_{eval_emb['frame_idx']}.npz",
+            **eval_emb,
+        )
 
 
 if __name__ == "__main__":
