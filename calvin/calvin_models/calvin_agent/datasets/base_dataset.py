@@ -74,13 +74,13 @@ class BaseDataset(Dataset):
         max_window_size: int = 32,
         pad: bool = True,
         aux_lang_loss_window: int = 1,
-        with_dino_feat: bool = False,
+        diffuse_on: str = "pixel",
     ):
         self.observation_space = obs_space
         self.proprio_state = proprio_state
         self.transforms = transforms
         self.with_lang = key == "lang"
-        self.with_dino_feat = with_dino_feat
+        self.with_dino_feat = diffuse_on == "dino_feat"
         self.relative_actions = "rel_actions" in self.observation_space["actions"]
 
         self.pad = pad
@@ -122,6 +122,7 @@ class BaseDataset(Dataset):
             x_cond = dino_features[0]
             x_cond = rearrange(x_cond, "f wh c -> f c wh")
             x_cond = rearrange(x_cond, "f c (w h) -> f c w h", w=16, h=16)
+            x_cond = x_cond.squeeze(0)
 
             x = dino_features[1:].squeeze(1)
             x = rearrange(x, "f wh c -> f c wh")
