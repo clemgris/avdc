@@ -68,7 +68,7 @@ def _pad_with_repetition(input_tensor: torch.Tensor, pad_size: int) -> torch.Ten
     return padded
 
 
-class ImageDataset(Dataset):
+class TrajDataset(Dataset):
     def __init__(
         self,
         expert_location: str,
@@ -77,21 +77,19 @@ class ImageDataset(Dataset):
         transform=None,
         **kwargs,
     ):
-        all_trajectories = load_trajectories(
+        self.all_trajectories = load_trajectories(
             expert_location, num_trajectories, seed, **kwargs
-        )["states"]
-        all_images = np.concatenate(all_trajectories)
-        self.images = all_images
+        )
         self.transform = transform
 
     def __len__(self):
-        return len(self.images)
+        return len(self.all_trajectories["states"])
 
     def __getitem__(self, idx):
-        image = self.images[idx]
-        if self.transform:
-            image = self.transform(image)
-        return image
+        traj = {}
+        for key, item in self.all_trajectories.items():
+            traj[key] = item[idx]
+        return traj
 
 
 class ExpertDataset(Dataset):
@@ -180,13 +178,14 @@ class ExpertDataset(Dataset):
                     else:
                         start_idx = 0
                         end_idx = data[i].shape[0] - 1
-                        num_frames = end_idx - start_idx
+                        num_frames = end_idx - start_idx + 1
                         episodes_idx = np.linspace(
                             start_idx,
                             end_idx,
                             num_frames // self.skip_frames,
                             dtype=int,
                         )
+                        breakpoint()
                         samples.append(data[i][episodes_idx])
                 self.trajectories[k] = samples
             else:
@@ -194,6 +193,9 @@ class ExpertDataset(Dataset):
                 self.trajectories[k] = (
                     np.array(data) // self.skip_frames
                 )  # subsample_frequency
+
+            # if self.with_dino_feat:
+            #     self.trajectories["dino_feat"] =
 
         if not full_traj:
             self.length = self.trajectories["lengths"].sum().item()
@@ -468,6 +470,64 @@ def load_calvin_data(expert_location, num_trajs, seed, **kwargs):
         == len(trajs["dones"])
     )
     return trajs
+
+
+class ExpertTrainDataset(Dataset):
+    def __init__(
+        self,
+        datasets_dir: str,
+        diffuse_on: str,
+        skip_frames: int = 1,
+        seed: int = 0,
+        transform=None,
+        **kwargs,
+    ):
+        self.datasets_dir = datasets_dir
+        self.diffuse_on = diffuse_on
+        self.skip_frames = skip_frames
+
+        self.files = []
+        for root, dirs, files in os.walk(datasets_dir):
+            for file in files:
+                if file.endswith(".npz"):
+                    self.files.append(os.path.join(root, file))
+        self.length = len(self.files)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        data = np.load(self.files[idx])
+        if self.diffuse_on == "dino_feat":
+            samples = data["dino_patch_emb"]
+        else:
+            samples = data["states"]
+
+        start_idx = 0
+        end_idx = samples.shape[0] - 1
+        num_frames = end_idx - start_idx + 1
+        episodes_idx = np.linspace(
+            start_idx,
+            end_idx,
+            num_frames // self.skip_frames,
+            dtype=int,
+        )
+        episode = samples[episodes_idx]
+        x_cond = episode[0]
+        x_cond = torch.Tensor(x_cond)
+        x = episode[1:]
+        x = torch.Tensor(x)
+
+        if self.diffuse_on == "dino_feat":
+            x_cond = rearrange(x_cond, "wh c -> c wh")
+            x_cond = rearrange(x_cond, "c (w h) -> c w h", w=16, h=16)
+
+            x = rearrange(x, "f wh c -> f c wh")
+            x = rearrange(x, "f c (w h) -> f c w h", w=16, h=16)
+
+        x = rearrange(x, "f c h w -> (f c) h w")
+        task = data["language"].item()
+        return x, x_cond, task
 
 
 if __name__ == "__main__":
