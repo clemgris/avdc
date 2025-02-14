@@ -36,7 +36,7 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 def main(args):
     cfg = DictConfig(
         {
-            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D", #/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -114,7 +114,7 @@ def main(args):
     # Frozen encoder model
     if args.features == "dino":
         encoder_model = DinoV2Encoder(
-            name="facebook/dinov2-base",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base"
+            name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base", #"facebook/dinov2-base",
         )
     else:
         raise ValueError(f"Unknown feature type {args.features}")
