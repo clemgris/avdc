@@ -5,3 +5,4 @@ calvin/dataset
 lorel/data
 ipynb_checkpoints
 results_*
+.ipynb_checkpoints/
