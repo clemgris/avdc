@@ -38,7 +38,7 @@ def main(args):
     valid_n = 1
     sample_per_seq = 8
 
-    results_folder = "../results_debug_dino/calvin"
+    results_folder = "../results_11_03/calvin"
 
     cfg = DictConfig(
         {
@@ -83,7 +83,7 @@ def main(args):
     transforms = OmegaConf.load(
         os.path.join(
             root_path,
-            "calvin/calvin_models/conf/datamodule/transforms/play_decoder.yaml",  ## DEBUG
+            "calvin/calvin_models/conf/datamodule/transforms/play_basic.yaml",
         )
     )
 
