@@ -42,7 +42,7 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D", #"/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -84,12 +84,11 @@ def main(args):
 
     training_cfg = DictConfig(
         {
-            "eval_every": 1,
-            "num_epochs": 10,
-            "batch_size": 2,
+            "eval_every": 20,
+            "num_epochs": 200,
+            "batch_size": 16,
             "lr": 1e-3,
-            "save_every": 1,
-            "num_valid": 10,
+            "save_every": 10,
         },
     )
 
@@ -131,7 +130,7 @@ def main(args):
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=2,
+        batch_size=training_cfg.batch_size,
         shuffle=True,
         num_workers=4,
         pin_memory=True,
@@ -140,7 +139,7 @@ def main(args):
 
     valid_loader = torch.utils.data.DataLoader(
         valid_set,
-        batch_size=2,
+        batch_size=1,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -197,11 +196,11 @@ def main(args):
 
             # Save results
             torchvision.utils.save_image(
-                rec_image,
+                rec_image[:5],
                 results_folder / f"rec_image_{epoch}.png",
             )
             torchvision.utils.save_image(
-                image,
+                image[:5],
                 results_folder / f"image_{epoch}.png",
             )
 
