@@ -32,7 +32,7 @@ from lorel.expert_dataset import ExpertTrainDecoderDataset  # noqa: E402
 def main(args):
     target_size = (64, 64)
 
-    results_folder = "../results_decoder/lorel"
+    results_folder = "../results_decoder_debug/lorel"
     results_folder = Path(results_folder)
 
     cfg = DictConfig(
@@ -93,7 +93,7 @@ def main(args):
 
     valid_loader = torch.utils.data.DataLoader(
         valid_set,
-        batch_size=2,
+        batch_size=16,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -138,7 +138,8 @@ def main(args):
         if epoch % training_cfg.eval_every == 0:
             decoder_model.eval()
             all_eval_losses = []
-            for image in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
+            for data in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
+                image, patch_emb = data
                 with torch.no_grad():
                     rec_image = decoder_model(patch_emb)
 
@@ -149,11 +150,11 @@ def main(args):
 
             # Save results
             torchvision.utils.save_image(
-                rec_image,
+                rec_image[0:5],
                 results_folder / f"rec_image_{epoch}.png",
             )
             torchvision.utils.save_image(
-                image,
+                image[0:5],
                 results_folder / f"image_{epoch}.png",
             )
 
