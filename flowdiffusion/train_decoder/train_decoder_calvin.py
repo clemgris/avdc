@@ -21,7 +21,6 @@ sys.path.append(
 )
 
 from decoder import TransposedConvDecoder  # noqa: E402
-from encoder import DinoV2Encoder  # noqa: E402
 
 sys.path.append(
     os.path.join(
@@ -38,10 +37,7 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 def main(args):
     target_size = (96, 96)
 
-    results_folder = "../results_decoder/calvin"
-    results_folder = Path(results_folder)
-
-    results_folder = "../results_decoder/calvin"
+    results_folder = "../results_decoder_11_03/calvin"
     results_folder = Path(results_folder)
 
     cfg = DictConfig(
@@ -73,6 +69,7 @@ def main(args):
                     "pad": False,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
+                    "diffuse_on": "dino_feat",
                 },
             },
         }
@@ -150,12 +147,9 @@ def main(args):
         drop_last=True,
     )
 
-    # Frozen encoder model
-    encoder_model = DinoV2Encoder()
-
     # Decoder model
     decoder_model = TransposedConvDecoder(
-        emb_dim=encoder_model.emb_dim,
+        emb_dim=768,
         observation_shape=(3, target_size[0], target_size[0]),
         patch_size=16,
     )
@@ -171,11 +165,10 @@ def main(args):
         # Training loop
         decoder_model.train()
         all_losses = []
-        for image in tqdm(
+        for data in tqdm(
             train_loader, desc=f"Epoch {epoch} / {training_cfg.num_epochs}"
         ):
-            breakpoint()
-            cls_emb, patch_emb = encoder_model(image)
+            image, patch_emb = data
             rec_image = decoder_model(patch_emb)
 
             optimizer.zero_grad()
@@ -192,8 +185,8 @@ def main(args):
         if epoch % training_cfg.eval_every == 0:
             decoder_model.eval()
             all_eval_losses = []
-            for image in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
-                cls_emb, patch_emb = encoder_model(image)
+            for data in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
+                image, patch_emb = data
                 with torch.no_grad():
                     rec_image = decoder_model(patch_emb)
 

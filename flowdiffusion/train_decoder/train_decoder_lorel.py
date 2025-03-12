@@ -6,9 +6,6 @@ import torch
 import torchvision.transforms as T  # noqa: F401
 from torch.utils.data import Subset
 
-from flowdiffusion.decoder import TransposedConvDecoder  # noqa: E402
-from flowdiffusion.encoder import DinoV2Encoder  # noqa: E402
-
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
 sys.path.append(
@@ -17,6 +14,8 @@ sys.path.append(
         "flowdiffusion",
     )
 )
+
+from flowdiffusion.decoder import TransposedConvDecoder  # noqa: E402
 
 root_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root_path)
@@ -27,7 +26,7 @@ import torchvision
 from omegaconf import DictConfig, OmegaConf
 from tqdm import tqdm
 
-from lorel.expert_dataset import ImageDataset  # noqa: E402
+from lorel.expert_dataset import ExpertTrainDecoderDataset  # noqa: E402
 
 
 def main(args):
@@ -38,8 +37,8 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
-            "num_data": 10,  # 38225,
+            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "num_data": 100,  # 38225,
         },
     )
 
@@ -66,7 +65,7 @@ def main(args):
 
     results_folder = Path(results_folder)
 
-    train_set = ImageDataset(cfg.root, num_trajectories=cfg.num_data, use_state=False)
+    train_set = ExpertTrainDecoderDataset(cfg.root)
 
     # Split train and valid
     valid_inds = [
@@ -101,12 +100,9 @@ def main(args):
         drop_last=True,
     )
 
-    # Frozen encoder model
-    encoder_model = DinoV2Encoder()
-
     # Decoder model
     decoder_model = TransposedConvDecoder(
-        emb_dim=encoder_model.emb_dim,
+        emb_dim=768,
         observation_shape=(3, target_size[0], target_size[0]),
         patch_size=16,
     )
@@ -122,10 +118,10 @@ def main(args):
         # Training loop
         decoder_model.train()
         all_losses = []
-        for image in tqdm(
+        for data in tqdm(
             train_loader, desc=f"Epoch {epoch} / {training_cfg.num_epochs}"
         ):
-            cls_emb, patch_emb = encoder_model(image)
+            image, patch_emb = data
             rec_image = decoder_model(patch_emb)
 
             optimizer.zero_grad()
@@ -143,7 +139,6 @@ def main(args):
             decoder_model.eval()
             all_eval_losses = []
             for image in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
-                cls_emb, patch_emb = encoder_model(image)
                 with torch.no_grad():
                     rec_image = decoder_model(patch_emb)
 

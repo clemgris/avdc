@@ -12,12 +12,13 @@ sys.path.append(
     )
 )
 
+import pickle
+
 import torch
-from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
-from torchvision import utils
-from transformers import CLIPTextModel, CLIPTokenizer
-from unet import UnetMW as Unet
+
+from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
+from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
 sys.path.append(
     os.path.join(
@@ -38,14 +39,14 @@ def main(args):
     valid_n = 1
     sample_per_seq = 8
 
-    results_folder = "../results_11_03/calvin"
+    results_folder = "../results_11_03_dino/calvin"
 
     cfg = DictConfig(
         {
             "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
             "datamodule": {
                 "lang_dataset": {
-                    "_target_": "calvin_agent.datasets.disk_dataset.DiskDataset",
+                    "_target_": "calvin_agent.datasets.disk_dataset.DiskActionDataset",
                     "key": "lang",
                     "save_format": "npz",
                     "batch_size": 32,
@@ -74,11 +75,6 @@ def main(args):
             },
         }
     )
-
-    if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
-        target_size = (16, 16)
-    else:
-        target_size = (96, 96)
 
     transforms = OmegaConf.load(
         os.path.join(
@@ -115,128 +111,124 @@ def main(args):
         print("Valid data:", len(valid_set))
 
         ## DEBUG
-        # import torchvision
-
+        # breakpoint()
         # for idx in range(len(train_set)):
-        #     x, x_cond, task = train_set[idx]
+        #     start, actions, end = train_set[idx]
         #     torchvision.utils.save_image(
-        #         x.reshape((7, 3, 96, 96)), f"train_img_{idx}_{task}.png"
+        #         start, f"train_start_{idx}.png"
+        #     )
+        #     torchvision.utils.save_image(
+        #         end, f"train_end_{idx}.png"
         #     )
         #     if idx > 10: break
 
         # for idx in range(len(valid_set)):
         #     x, x_cond, task = valid_set[idx]
         #     torchvision.utils.save_image(
-        #         x.reshape((7, 3, 96, 96)), f"valid_img_{idx}_{task}.png"
+        #         start, f"valid_start_{idx}.png"
+        #     )
+        #     torchvision.utils.save_image(
+        #         end, f"valid_end_{idx}.png"
         #     )
         #     if idx > 10: break
         # breakpoint()
 
-    unet = Unet()
+    # Create a directory to store the training checkpoint.
+    output_directory = Path("outputs/train/example_pusht_diffusion")
+    output_directory.mkdir(parents=True, exist_ok=True)
 
-    pretrained_model = (
-        "openai/clip-vit-base-patch32"
-        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-    )
-    tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
-    text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
-    text_encoder.requires_grad_(False)
-    text_encoder.eval()
+    # Number of offline training steps (we'll only do offline training for this example.)
+    # Adjust as you prefer. 5000 steps are needed to get something worth evaluating.
+    training_steps = 5000
+    device = torch.device("cuda")
+    log_freq = 250
 
-    diffusion = GoalGaussianDiffusion(
-        channels=3 * (sample_per_seq - 1),
-        model=unet,
-        image_size=target_size,
-        timesteps=100,
-        sampling_timesteps=args.sample_steps,
-        loss_type="l2",
-        objective="pred_v",
-        beta_schedule="cosine",
-        min_snr_loss_weight=True,
-        auto_normalize=False,
-    )
-
-    trainer = Trainer(
-        diffusion_model=diffusion,
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        train_set=train_set,
-        valid_set=valid_set,
-        train_lr=1e-4,
-        train_num_steps=60000,
-        save_and_sample_every=2500,
-        ema_update_every=10,
-        ema_decay=0.999,
-        train_batch_size=16,
-        valid_batch_size=32,
-        gradient_accumulate_every=1,
-        num_samples=valid_n,
-        results_folder=results_folder,
-        fp16=True,
-        amp=True,
-        calculate_fid=False,
+    # Set up the the policy.
+    # Policies are initialized with a configuration class, in this case `DiffusionConfig`.
+    # For this example, no arguments need to be passed because the defaults are set up for PushT.
+    # If you're doing something different, you will likely need to change at least some of the defaults.
+    diff_cfg = DiffusionConfig(
+        n_obs_steps=2,
+        horizon=8,
+        input_shapes={
+            "observation.image": [3, 96, 96],
+            "observation.state": [0],
+        },
+        output_shapes={
+            "action": [7],
+        },
     )
 
-    if args.checkpoint_num is not None:
-        trainer.load(args.checkpoint_num)
-
-    if args.mode == "train":
-        trainer.train()
+    stats_path = os.path.join(cfg.root, "training/dataset_stats.pkl")
+    if os.path.exists(stats_path):
+        train_stats = pickle.load(open(stats_path, "rb"))
     else:
-        import imageio
-        import torch
-        from PIL import Image
-        from torchvision import transforms
+        # Create stats
+        train_stats = {
+            "observation.image": {
+                "min": torch.tensor([-1.0] * 3, dtype=torch.float32)[:, None, None],
+                "max": torch.tensor([1.0] * 3)[:, None, None],
+                "mean": torch.tensor([0.0] * 3)[:, None, None],  # Do nothing
+                "std": torch.tensor([1.0] * 3)[:, None, None],  # Do nothing
+            },
+            "observation.state": {
+                "min": torch.tensor([0.0] * 2),
+                "max": torch.tensor([0.0] * 2),
+                "mean": torch.tensor([0.0] * 2),
+                "std": torch.tensor([1.0] * 2),
+            },
+            "action": {},
+        }
+        all_actions = []
+        for data in train_set:
+            action = data["action"][0]
+            all_actions.append(action)
+        train_stats["action"]["mean"] = torch.mean(torch.stack(all_actions), dim=0)
+        train_stats["action"]["std"] = torch.std(torch.stack(all_actions), dim=0)
+        train_stats["action"]["min"] = torch.min(torch.stack(all_actions), dim=0).values
+        train_stats["action"]["max"] = torch.max(torch.stack(all_actions), dim=0).values
 
-        text = args.text
-        os.makedirs(
-            str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
-            exist_ok=True,
-        )
+        # Save stats
+        pickle.dump(train_stats, open(stats_path, "wb"))
 
-        guidance_weight = args.guidance_weight
-        image = Image.open(args.inference_path).convert("RGB")
-        image.save(str(results_folder / "test_imgs / test_img.png"))
+    policy = DiffusionPolicy(diff_cfg, dataset_stats=train_stats)
+    policy.train()
+    policy.to(device)
 
-        batch_size = 1
-        transform = transforms.Compose(
-            [
-                transforms.Resize(target_size),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5], std=[0.5]),
-            ]
-        )
-        image = transform(image)
-        for i in range(args.num_samples):
-            output = trainer.sample(
-                image.unsqueeze(0), [text], batch_size, guidance_weight
-            ).cpu()
+    optimizer = torch.optim.Adam(policy.parameters(), lr=1e-4)
 
-            # Unnormalize
-            output = output * 0.5 + 0.5
+    # Create dataloader for offline training.
+    dataloader = torch.utils.data.DataLoader(
+        train_set,
+        num_workers=4,
+        batch_size=64,
+        shuffle=True,
+        pin_memory=device != torch.device("cpu"),
+        drop_last=True,
+    )
 
-            output = output[0].reshape(-1, 3, *target_size)
-            output = torch.cat([image.unsqueeze(0) * 0.5 + 0.5, output], dim=0)
-            utils.save_image(
-                output,
-                os.path.join(
-                    str(
-                        results_folder
-                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
-                    ),
-                    f"{text.replace(' ', '_')}_sample-{i}.png",
-                ),
-                nrow=sample_per_seq,
-            )
-            output_gif = os.path.join(
-                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
-                f"{text.replace(' ', '_')}_sample-{i}.gif",
-            )
-            output = (
-                output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255
-            ).astype("uint8")
-            imageio.mimsave(output_gif, output, duration=200, loop=1000)
-            print(f"Generated {output_gif}")
+    # Run training loop.
+    step = 0
+    done = False
+    while not done:
+        for batch in dataloader:
+            batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
+            # breakpoint()
+            output_dict = policy.forward(batch)
+            loss = output_dict["loss"]
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            if step % log_freq == 0:
+                print(f"step: {step} loss: {loss.item():.3f}")
+            step += 1
+            if step >= training_steps:
+                done = True
+                break
+
+    # Save a policy checkpoint.
+    policy.save_pretrained(output_directory)
 
 
 if __name__ == "__main__":
