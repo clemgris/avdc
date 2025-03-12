@@ -530,6 +530,39 @@ class ExpertTrainDataset(Dataset):
         return x, x_cond, task
 
 
+class ExpertTrainDecoderDataset(Dataset):
+    def __init__(
+        self,
+        datasets_dir: str,
+        seed: int = 0,
+        transform=None,
+        traj_len: int = 20,
+        **kwargs,
+    ):
+        self.datasets_dir = datasets_dir
+        self.traj_len = traj_len
+
+        self.files = []
+        for root, dirs, files in os.walk(datasets_dir):
+            for file in files:
+                if file.endswith(".npz"):
+                    self.files.append(os.path.join(root, file))
+        self.num_episodes = len(self.files)
+        self.num_frames = self.num_episodes * self.traj_len
+
+    def __len__(self):
+        return self.num_frames
+
+    def __getitem__(self, idx):
+        episode_idx = idx // self.traj_len
+        frame_idx = idx % self.traj_len
+
+        episode = np.load(self.files[episode_idx])
+        features = episode["dino_patch_emb"][frame_idx]
+        image = episode["states"][frame_idx]
+        return image, features
+
+
 if __name__ == "__main__":
     #     d = ExpertDataset('/atlas/u/divgarg/datasets/babyai/demos_iclr19_v2/BabyAI-GoToObj-v0_valid.pkl', 5, no_lang=True, normalize_states=False, use_direction=False)
     #     print(d[0])
