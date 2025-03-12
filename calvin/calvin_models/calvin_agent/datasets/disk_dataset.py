@@ -4,11 +4,11 @@ import pickle
 import re
 from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
 from calvin_agent.datasets.base_dataset import BaseDataset
-from calvin_agent.datasets.utils.episode_utils import process_rgb
+from calvin_agent.datasets.utils.episode_utils import process_features, process_rgb
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def load_npz(filename: Path) -> Dict[str, np.ndarray]:
     return np.load(filename.as_posix())
 
 
-class DiskDataset(BaseDataset):
+class DiskDiffusionDataset(BaseDataset):
     """
     Dataset that loads episodes as individual files from disk.
 
@@ -230,6 +230,9 @@ class DiskImageDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
+    def _get_dino_feat_name(self, file_idx: int) -> Path:
+        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+
     def _generate_image_indices(self) -> List[Tuple[int, int]]:
         """
         Generates a list of (episode_idx, frame_idx) pairs to ensure every image is seen once per epoch.
@@ -259,12 +262,19 @@ class DiskImageDataset(BaseDataset):
         keys.remove("language")
         keys.append("scene_obs")
 
-        episode = self.load_file(self._get_episode_name(frame_idx))
+        frame = self.load_file(self._get_episode_name(frame_idx))
+        dino_feat = self.load_file(self._get_dino_feat_name(frame_idx))
 
-        sample = {key: episode[key] for key in keys}
+        sample = {key: frame[key] for key in keys}
+        sample["dino_features"] = dino_feat["patch_emb"]
+
         rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
+        dino_feat = process_features(sample, self.transforms, self.with_dino_feat)
+        sample = {**rgb_obs, **dino_feat}
 
-        return frame_idx, rgb_obs["rgb_obs"]["rgb_static"].squeeze(0)
+        image = sample["rgb_obs"]["rgb_static"].squeeze(0)
+        features = sample["dino_features"].squeeze(0)
+        return image, features
 
     def _build_file_indices_lang(
         self, abs_datasets_dir: Path
@@ -311,3 +321,173 @@ class DiskImageDataset(BaseDataset):
             episode_lookup.append((start_idx, end_idx))
 
         return np.array(episode_lookup), lang_lookup, lang_ann
+
+
+class DiskActionDataset(BaseDataset):
+    """
+    Dataset that loads episodes as individual files from disk.
+
+    Args:
+        skip_frames: Skip this amount of windows for language dataset.
+        save_format: File format in datasets_dir (pkl or npz).
+        pretrain: Set to True when pretraining.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        skip_frames: int = 1,
+        save_format: str = "npz",
+        pretrain: bool = False,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self.save_format = save_format
+        if self.save_format == "pkl":
+            self.load_file = load_pkl
+        elif self.save_format == "npz":
+            self.load_file = load_npz
+        else:
+            raise NotImplementedError
+        self.pretrain = pretrain
+        self.skip_frames = skip_frames
+
+        if self.with_lang:
+            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+                self._build_file_indices_lang(self.abs_datasets_dir)
+            )
+            print(len(self.episode_lookup))
+        else:
+            self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
+
+        self.with_lang = False
+
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
+        )
+
+    def _get_episode_name(self, file_idx: int) -> Path:
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
+
+    def _get_dino_feat_name(self, file_idx: int) -> Path:
+        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+
+    def __len__(self) -> int:
+        return len(self.episode_lookup)
+
+    def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
+        """
+        Load entire_episode which frames spaced by skip_frames.
+
+        Args:
+            idx: Index of first frame.
+        Returns:
+            episode: Dict of numpy arrays containing the episode where keys are the names of modalities.
+        """
+        start_idx, end_idx, j = self.episode_lookup[idx]
+
+        keys = list(chain(*self.observation_space.values()))
+        keys.remove("language")
+        keys.append("scene_obs")
+
+        episodes_idx = np.arange(start_idx, end_idx - self.skip_frames + 1)
+
+        # Pick randm frame from the episode except the last one
+        frame_idx = episodes_idx[j]
+
+        # Action idx are from the frame_idx to the next frame
+        assert frame_idx + self.skip_frames <= end_idx
+        actions_idx = np.arange(frame_idx, frame_idx + self.skip_frames)
+        episodes = [
+            self.load_file(self._get_episode_name(file_idx)) for file_idx in actions_idx
+        ]
+
+        episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
+        if self.with_lang:
+            episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+        if self.with_dino_feat:
+            dino_features = [
+                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+                for file_idx in actions_idx
+            ]
+            episode["dino_features"] = dino_features
+        return episode
+
+    def _build_file_indices_lang(
+        self, abs_datasets_dir: Path
+    ) -> Tuple[np.ndarray, List, np.ndarray]:
+        """
+        This method builds the mapping from index to file_name used for loading the episodes of the language dataset.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+            lang_lookup: Mapping from training example to index of language instruction.
+            lang_ann: Language tasks.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        episode_lookup = []
+
+        # Load lang data from pickle
+        try:
+            print(
+                "trying to load lang data from: ",
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                allow_pickle=True,
+            ).item()
+        except Exception:
+            print(
+                "Exception, trying to load lang data from: ",
+                abs_datasets_dir / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+            ).item()
+
+        ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
+        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_lookup = []
+        for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
+            assert end_idx >= self.max_window_size
+            lang_lookup.append(i)
+            for j in range(0, end_idx - start_idx + 1 - self.skip_frames):
+                episode_lookup.append((start_idx, end_idx, j))
+
+        return np.array(episode_lookup), lang_lookup, lang_ann
+
+    def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
+        """
+        Get sequence of dataset.
+
+        Args:
+            idx: Index of the sequence.
+
+        Returns:
+            Loaded sequence.
+        """
+
+        sequence = self._get_sequences(idx)
+
+        start_image = sequence["rgb_obs"]["rgb_static"][0]
+        actions = sequence["actions"]
+        end_image = sequence["rgb_obs"]["rgb_static"][-1]
+        # Stack start and end images
+        start_end_images = np.stack([start_image, end_image])
+        state = np.zeros((2, 2))
+        action_is_pad = np.zeros_like(actions, dtype=np.int32)
+
+        res = {
+            "observation.image": start_end_images,
+            "observation.state": state,
+            "action": actions,
+            "action_is_pad": action_is_pad,
+        }
+        return res
