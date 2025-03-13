@@ -209,11 +209,11 @@ def main(args):
 
             # Save results
             torchvision.utils.save_image(
-                rec_image[:5],
+                rec_image,
                 results_folder / f"rec_image_{epoch}.png",
             )
             torchvision.utils.save_image(
-                image[:5],
+                image,
                 results_folder / f"image_{epoch}.png",
             )
 
