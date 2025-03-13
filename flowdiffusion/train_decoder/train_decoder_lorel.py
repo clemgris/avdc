@@ -32,24 +32,24 @@ from lorel.expert_dataset import ExpertTrainDecoderDataset  # noqa: E402
 def main(args):
     target_size = (64, 64)
 
-    results_folder = "../results_decoder_debug/lorel"
+    results_folder = "../results_decoder/lorel"
     results_folder = Path(results_folder)
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
-            "num_data": 100,  # 38225,
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/data_with_dino_features", #"/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",
+            "num_data": 38225, # 100
         },
     )
 
     training_cfg = DictConfig(
         {
-            "eval_every": 1,
-            "num_epochs": 10,
-            "batch_size": 2,
+            "eval_every": 10,
+            "num_epochs": 200,
+            "batch_size": 16,
             "lr": 1e-3,
-            "save_every": 1,
-            "num_valid": 10,
+            "save_every": 10,
+            "num_valid": 1000,
         },
     )
 
@@ -84,7 +84,7 @@ def main(args):
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=2,
+        batch_size=training_cfg.batch_size,
         shuffle=True,
         num_workers=4,
         pin_memory=True,

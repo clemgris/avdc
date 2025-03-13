@@ -37,7 +37,7 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 def main(args):
     target_size = (96, 96)
 
-    results_folder = "../results_decoder_11_03/calvin"
+    results_folder = "../results_decoder/calvin"
     results_folder = Path(results_folder)
 
     cfg = DictConfig(
@@ -84,7 +84,7 @@ def main(args):
 
     training_cfg = DictConfig(
         {
-            "eval_every": 20,
+            "eval_every": 10,
             "num_epochs": 200,
             "batch_size": 16,
             "lr": 1e-3,
