@@ -35,17 +35,16 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    valid_n = 1
-    sample_per_seq = 8
+    sample_per_seq = 2  # 8
 
-    results_folder = "../results_11_03/calvin"
+    results_folder = "../results_single_debug"
 
     cfg = DictConfig(
         {
             "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
             "datamodule": {
                 "lang_dataset": {
-                    "_target_": "calvin_agent.datasets.disk_dataset.DiskDataset",
+                    "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
                     "batch_size": 32,
@@ -65,7 +64,7 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "skip_frames": 8,
+                    "skip_frames": 32,  # 8
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -110,6 +109,7 @@ def main(args):
     else:
         train_set = data_module.train_datasets["lang"]
         valid_set = data_module.val_datasets["lang"]
+        valid_n = 1
 
         print("Train data:", len(train_set))
         print("Valid data:", len(valid_set))
@@ -120,9 +120,10 @@ def main(args):
         # for idx in range(len(train_set)):
         #     x, x_cond, task = train_set[idx]
         #     torchvision.utils.save_image(
-        #         x.reshape((7, 3, 96, 96)), f"train_img_{idx}_{task}.png"
+        #         x.reshape((1, 3, 96, 96)), f"train_img_{idx}_{task}.png"
         #     )
-        #     if idx > 10: break
+        #     if idx > 10:
+        #         break
 
         # for idx in range(len(valid_set)):
         #     x, x_cond, task = valid_set[idx]

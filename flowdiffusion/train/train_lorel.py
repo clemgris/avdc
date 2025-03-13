@@ -30,14 +30,14 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 def main(args):
     valid_n = 1
-    sample_per_seq = 10
+    sample_per_seq = 2  # 10
 
-    results_folder = "../results_debug_dino/lorel"
+    results_folder = "../results_single/lorel"
 
     cfg = DictConfig(
         {
             "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
-            "skip_frames": 2,
+            "skip_frames": 10,  # 2
             "diffuse_on": "pixel",
             "num_data": 100,  # 38225,
         },
