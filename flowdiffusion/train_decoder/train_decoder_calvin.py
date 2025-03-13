@@ -175,6 +175,9 @@ def main(args):
             train_loader, desc=f"Epoch {epoch} / {training_cfg.num_epochs}"
         ):
             image, patch_emb = data
+            patch_emb = patch_emb.to(device)
+            image = image.to(device)
+
             rec_image = decoder_model(patch_emb)
 
             optimizer.zero_grad()
@@ -193,6 +196,9 @@ def main(args):
             all_eval_losses = []
             for data in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
                 image, patch_emb = data
+                patch_emb = patch_emb.to(device)
+                image = image.to(device)
+
                 with torch.no_grad():
                     rec_image = decoder_model(patch_emb)
 
