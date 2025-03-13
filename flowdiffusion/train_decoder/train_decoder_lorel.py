@@ -24,9 +24,13 @@ import argparse
 import numpy as np
 import torchvision
 from omegaconf import DictConfig, OmegaConf
+from torch.nn import DataParallel
 from tqdm import tqdm
 
 from lorel.expert_dataset import ExpertTrainDecoderDataset  # noqa: E402
+
+# Print number of GPUs available
+print(f"CUDA available: {torch.cuda.is_available()}")
 
 
 def main(args):
@@ -37,8 +41,8 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/data_with_dino_features", #"/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",
-            "num_data": 38225, # 100
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",
+            "num_data": 38225,  # 100
         },
     )
 
@@ -106,6 +110,7 @@ def main(args):
         observation_shape=(3, target_size[0], target_size[0]),
         patch_size=16,
     )
+    decoder_model = DataParallel(decoder_model)
     decoder_model.train()
 
     optimizer = torch.optim.Adam(

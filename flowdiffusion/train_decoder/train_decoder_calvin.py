@@ -8,6 +8,7 @@ import torch
 import torchvision
 import torchvision.transforms as T  # noqa: F401
 from omegaconf import DictConfig, OmegaConf
+from torch.nn import DataParallel
 from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,6 +34,9 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
     CalvinDataModule,  # noqa: E402
 )
 
+# Print number of GPUs available
+print(f"CUDA available: {torch.cuda.is_available()}")
+
 
 def main(args):
     target_size = (96, 96)
@@ -42,7 +46,7 @@ def main(args):
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D", #"/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",  # "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -152,6 +156,7 @@ def main(args):
         observation_shape=(3, target_size[0], target_size[0]),
         patch_size=16,
     )
+    decoder_model = DataParallel(decoder_model)
     decoder_model.train()
 
     optimizer = torch.optim.Adam(
