@@ -31,6 +31,7 @@ from lorel.expert_dataset import ExpertTrainDecoderDataset  # noqa: E402
 
 # Print number of GPUs available
 print(f"CUDA available: {torch.cuda.is_available()}")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def main(args):
@@ -48,11 +49,11 @@ def main(args):
 
     training_cfg = DictConfig(
         {
-            "eval_every": 10,
-            "num_epochs": 200,
-            "batch_size": 16,
+            "eval_every": 1,
+            "num_epochs": 20,
+            "batch_size": 256,
             "lr": 1e-3,
-            "save_every": 10,
+            "save_every": 1,
             "num_valid": 1000,
         },
     )
@@ -111,6 +112,7 @@ def main(args):
         patch_size=16,
     )
     decoder_model = DataParallel(decoder_model)
+    decoder_model = decoder_model.to(device)
     decoder_model.train()
 
     optimizer = torch.optim.Adam(
