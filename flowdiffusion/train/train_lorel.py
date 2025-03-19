@@ -32,14 +32,21 @@ def main(args):
     valid_n = 1
     sample_per_seq = 2  # 10
 
-    results_folder = "../results_single/lorel"
+    results_folder = "../results_single_debug/lorel"
+
+    if args.server == "jz":
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl"
+        num_data = 38225
+    else:
+        data_path = "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features"
+        num_data = 100
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features",  # "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k.pkl",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl",
+            "root": data_path,
             "skip_frames": 10,  # 2
             "diffuse_on": "pixel",
-            "num_data": 100,  # 38225,
+            "num_data": num_data,
         },
     )
 
@@ -109,10 +116,13 @@ def main(args):
     # breakpoint()
     unet = Unet()
 
-    pretrained_model = (
-        "openai/clip-vit-base-patch32"
-        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-    )
+    if args.server == "jz":
+        pretrained_model = (
+            "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        )
+    else:
+        pretrained_model = "openai/clip-vit-base-patch32"
+
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -211,6 +221,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-s", "--server", type=str, default="jz"
+    )  # set to 'jz' to run on jean zay server
     parser.add_argument(
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder

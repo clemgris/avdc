@@ -35,13 +35,16 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    sample_per_seq = 2  # 8
-
     results_folder = "../results_single_debug"
+
+    if args.server == "jz":
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
+    else:
+        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
 
     cfg = DictConfig(
         {
-            "root": "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",  # "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",
+            "root": data_path,
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
@@ -49,7 +52,7 @@ def main(args):
                     "save_format": "npz",
                     "batch_size": 32,
                     "min_window_size": 16,
-                    "max_window_size": 64,
+                    "max_window_size": 65,
                     "proprio_state": {
                         "n_state_obs": 8,
                         "keep_indices": [[0, 7], [14, 15]],
@@ -64,7 +67,7 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "skip_frames": 32,  # 8
+                    "num_subgoals": 1,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -73,6 +76,8 @@ def main(args):
             },
         }
     )
+
+    sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
     if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
         target_size = (16, 16)
@@ -135,10 +140,13 @@ def main(args):
 
     unet = Unet()
 
-    pretrained_model = (
-        "openai/clip-vit-base-patch32"
-        # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-    )
+    if args.server == "jz":
+        pretrained_model = (
+            "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+        )
+    else:
+        pretrained_model = "openai/clip-vit-base-patch32"
+
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
     text_encoder.requires_grad_(False)
@@ -242,6 +250,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "-s", "--server", type=str, default="hacienda", choices=["jz", "local"]
+    )  # set to 'jz' to use jean zay server
     parser.add_argument(
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder
