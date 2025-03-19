@@ -194,7 +194,7 @@ class BaseDataset(Dataset):
         Returns:
             Number of frames to pad.
         """
-        return self.max_window_size // self.skip_frames - len(sequence["actions"])
+        return self.num_subgoals + 1 - len(sequence["actions"])
 
     def _pad_sequence(self, seq: Dict, pad_size: int) -> Dict:
         """
