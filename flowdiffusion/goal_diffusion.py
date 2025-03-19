@@ -808,7 +808,6 @@ class GoalGaussianDiffusion(nn.Module):
             target = v
         else:
             raise ValueError(f"unknown objective {self.objective}")
-
         loss = self.loss_fn(model_out, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
 
@@ -1112,7 +1111,6 @@ class Trainer(object):
                                 xs.append(x)
                                 x_conds.append(x_cond.to(device))
                                 task_embeds.append(self.encode_batch_text(label))
-
                             with self.accelerator.autocast():
                                 all_xs_list = list(
                                     map(
@@ -1133,11 +1131,11 @@ class Trainer(object):
                         gt_xs = rearrange(gt_xs, "b (n c) h w -> b n c h w", n=n_rows)
                         ### save images
                         x_conds = torch.cat(x_conds, dim=0).detach().cpu()
-                        # x_conds = rearrange(x_conds, 'b (n c) h w -> b n c h w', n=1)
+                        x_conds = rearrange(x_conds, "b (n c) h w -> b n c h w", n=1)
                         all_xs = torch.cat(all_xs_list, dim=0).detach().cpu()
                         all_xs = rearrange(all_xs, "b (n c) h w -> b n c h w", n=n_rows)
 
-                        gt_first = gt_xs[:, :1]
+                        gt_first = x_conds
 
                         if self.step == self.save_and_sample_every:
                             os.makedirs(
