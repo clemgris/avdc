@@ -498,6 +498,8 @@ class ExpertTrainDataset(Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.files[idx])
+        print(data.keys())
+        print(data["actions"].shape)
         if self.diffuse_on == "dino_feat":
             samples = data["dino_patch_emb"]
         else:
@@ -561,6 +563,57 @@ class ExpertTrainDecoderDataset(Dataset):
         features = episode["dino_patch_emb"][frame_idx]
         image = episode["states"][frame_idx]
         return image, features
+
+
+class ExpertActionDataset(Dataset):
+    def __init__(
+        self,
+        datasets_dir: str,
+        diffuse_on: str,
+        skip_frames: int = 1,
+        seed: int = 0,
+        transform=None,
+        **kwargs,
+    ):
+        self.datasets_dir = datasets_dir
+        self.diffuse_on = diffuse_on
+        self.skip_frames = skip_frames
+
+        self.num_frames = 20 - self.skip_frames + 1
+
+        self.files = []
+        for root, dirs, files in os.walk(datasets_dir):
+            for file in files:
+                if file.endswith(".npz"):
+                    self.files.append(os.path.join(root, file))
+        self.length = len(self.files) * self.num_frames
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, idx):
+        episodes_idx = idx // (self.num_frames)
+        frame_idx = idx % (self.num_frames)
+
+        data = np.load(self.files[episodes_idx])
+        episodes_idx = np.arange(frame_idx, frame_idx + self.skip_frames)
+
+        start_image = data["states"][episodes_idx][0]
+        actions = data["actions"][episodes_idx]
+        end_image = data["states"][episodes_idx][-1]
+        # Stack start and end images
+        start_end_images = np.stack([start_image, end_image])
+        state = np.zeros((2, 2))
+        action_is_pad = np.zeros_like(actions, dtype=np.int32)
+
+        res = {
+            "observation.image": torch.tensor(start_end_images),
+            "observation.state": torch.tensor(state),
+            "action": torch.tensor(actions),
+            "action_is_pad": torch.tensor(action_is_pad),
+        }
+
+        return res
 
 
 if __name__ == "__main__":
