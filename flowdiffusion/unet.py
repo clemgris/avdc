@@ -1,7 +1,7 @@
+import torch
+from einops import rearrange, repeat
 from guided_diffusion.guided_diffusion.unet import UNetModel
 from torch import nn
-import torch
-from einops import repeat, rearrange
 
 
 class UnetBridge(nn.Module):
@@ -29,12 +29,13 @@ class UnetBridge(nn.Module):
         self.unet.convert_to_fp32()
 
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 3 - 1 
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', c=3)
+        f = x.shape[1] // 3 - 1
+        x_cond = repeat(x[:, -3:], "b c h w -> b c f h w", f=f)
+        x = rearrange(x[:, :-3], "b (f c) h w -> b c f h w", c=3)
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
-        return rearrange(out, 'b c f h w -> b (f c) h w')
+        return rearrange(out, "b c f h w -> b (f c) h w")
+
 
 class UnetMW(nn.Module):
     def __init__(self):
@@ -57,14 +58,16 @@ class UnetMW(nn.Module):
             use_fp16=False,
             num_head_channels=32,
         )
+
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 3 - 1 
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', c=3)
+        f = x.shape[1] // 3 - 1
+        x_cond = repeat(x[:, -3:], "b c h w -> b c f h w", f=f)
+        x = rearrange(x[:, :-3], "b (f c) h w -> b c f h w", c=3)
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
-        return rearrange(out, 'b c f h w -> b (f c) h w')
-      
+        return rearrange(out, "b c f h w -> b (f c) h w")
+
+
 class UnetMW_flow(nn.Module):
     def __init__(self):
         super(UnetMW_flow, self).__init__()
@@ -86,14 +89,16 @@ class UnetMW_flow(nn.Module):
             use_fp16=False,
             num_head_channels=32,
         )
+
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 2 - 1 
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', f=f) 
+        f = x.shape[1] // 2 - 1
+        x_cond = repeat(x[:, -3:], "b c h w -> b c f h w", f=f)
+        x = rearrange(x[:, :-3], "b (f c) h w -> b c f h w", f=f)
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
-        return rearrange(out, 'b c f h w -> b (f c) h w')
-    
+        return rearrange(out, "b c f h w -> b (f c) h w")
+
+
 class UnetThor(nn.Module):
     def __init__(self):
         super(UnetThor, self).__init__()
@@ -119,11 +124,9 @@ class UnetThor(nn.Module):
         self.unet.convert_to_fp32()
 
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 3 - 1 
-        x_cond = repeat(x[:, -3:], 'b c h w -> b c f h w', f=f)
-        x = rearrange(x[:, :-3], 'b (f c) h w -> b c f h w', c=3)
+        f = x.shape[1] // 3 - 1
+        x_cond = repeat(x[:, -3:], "b c h w -> b c f h w", f=f)
+        x = rearrange(x[:, :-3], "b (f c) h w -> b c f h w", c=3)
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
-        return rearrange(out, 'b c f h w -> b (f c) h w')
-    
-
+        return rearrange(out, "b c f h w -> b (f c) h w")
