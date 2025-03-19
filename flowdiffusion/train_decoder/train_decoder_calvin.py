@@ -42,12 +42,17 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def main(args):
     target_size = (96, 96)
 
-    results_folder = "../results_decoder/calvin"
+    results_folder = "../results_decoder_debug/calvin"
     results_folder = Path(results_folder)
+
+    if args.server == "jz":
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
+    else:
+        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
 
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D",  # "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": data_path,
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -70,7 +75,6 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "skip_frames": 1,
                     "pad": False,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -227,6 +231,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--server", type=str, default="hacienda"
+    )  # set to "jz" to run on jean zay server
     parser.add_argument(
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder
