@@ -35,7 +35,7 @@ def main(args):
     results_folder = "../results_single_debug/lorel"
 
     if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/dec_24_sawyer_50k.pkl"
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/TrajectoryDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_50k/data_with_dino_features"
         num_data = 38225
     else:
         data_path = "/home/grislain/SkillDiffuser/lorel/data/dec_24_sawyer_50k/dec_24_sawyer_1k/data_with_dino_features"
@@ -81,7 +81,6 @@ def main(args):
         train_set = ExpertTrainDataset(
             cfg.root, skip_frames=cfg.skip_frames, diffuse_on=cfg.diffuse_on
         )
-
         # Split train and valid
         valid_inds = [i for i in range(0, len(train_set), len(train_set) // valid_n)][
             :valid_n
@@ -222,7 +221,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-s", "--server", type=str, default="jz"
+        "-s", "--server", type=str, default="hacienda"
     )  # set to 'jz' to run on jean zay server
     parser.add_argument(
         "-o", "--override", type=bool, default=False

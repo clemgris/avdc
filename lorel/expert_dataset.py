@@ -498,8 +498,6 @@ class ExpertTrainDataset(Dataset):
 
     def __getitem__(self, idx):
         data = np.load(self.files[idx])
-        print(data.keys())
-        print(data["actions"].shape)
         if self.diffuse_on == "dino_feat":
             samples = data["dino_patch_emb"]
         else:
