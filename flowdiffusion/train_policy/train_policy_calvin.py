@@ -124,9 +124,7 @@ def main(args):
                 "action": [7],
             },
             "n_action_steps": 8,
-            "input_normalization_modes": {
-                "observation.state": "min_max",
-            },
+            "input_normalization_modes": {},
         }
     )
     diff_cfg = DiffusionConfig(**diff_cfg)
