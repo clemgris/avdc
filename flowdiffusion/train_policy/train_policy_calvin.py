@@ -3,6 +3,8 @@ import os
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
 sys.path.append(
@@ -36,7 +38,7 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    results_folder = "../results_policy_debug/calvin"
+    results_folder = "../results_policy_huit/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
@@ -106,7 +108,7 @@ def main(args):
     print("Train data:", len(train_set))
     print("Valid data:", len(valid_set))
 
-    training_steps = 5000  # TO BE MODIFIED
+    training_steps = 60000  # TO BE MODIFIED
     device = torch.device("cuda")
     log_freq = 10
 
@@ -121,6 +123,10 @@ def main(args):
             "output_shapes": {
                 "action": [7],
             },
+            "n_action_steps": 8,
+            "input_normalization_modes": {
+                "observation.state": "min_max",
+            },
         }
     )
     diff_cfg = DiffusionConfig(**diff_cfg)
@@ -133,22 +139,10 @@ def main(args):
     else:
         # Create stats
         train_stats = {
-            "observation.image": {
-                "min": torch.tensor([-1.0] * 3, dtype=torch.float32)[:, None, None],
-                "max": torch.tensor([1.0] * 3)[:, None, None],
-                "mean": torch.tensor([0.0] * 3)[:, None, None],  # Do nothing
-                "std": torch.tensor([1.0] * 3)[:, None, None],  # Do nothing
-            },
-            "observation.state": {
-                "min": torch.tensor([0.0] * 2),
-                "max": torch.tensor([0.0] * 2),
-                "mean": torch.tensor([0.0] * 2),
-                "std": torch.tensor([1.0] * 2),
-            },
             "action": {},
         }
         all_actions = []
-        for data in train_set:
+        for data in tqdm(train_set, desc="Generating stats"):
             action = data["action"][0]
             all_actions.append(action)
         train_stats["action"]["mean"] = torch.mean(torch.stack(all_actions), dim=0)
