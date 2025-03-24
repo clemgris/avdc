@@ -601,11 +601,11 @@ class DiskActionDataset(BaseDataset):
             sequence = self._pad_sequence(sequence, pad_size)
 
         start_image = sequence["rgb_obs"]["rgb_static"][0]
-        actions = sequence["actions"][:-1]
+        actions = np.array(sequence["actions"][:-1], dtype=np.float32)
         end_image = sequence["rgb_obs"]["rgb_static"][-1]
         # Stack start and end images
-        start_end_images = np.stack([start_image, end_image])
-        state = np.zeros((2, 2))
+        start_end_images = np.stack([start_image, end_image], dtype=np.float32)
+        state = np.zeros((2, 2), dtype=np.float32)
         action_is_pad = np.zeros_like(actions, dtype=np.int32)
 
         res = {
@@ -814,3 +814,287 @@ class DiskEvaluatorDataset(BaseDataset):
             target = images[1]
         task = sequence["lang"]
         return target, task, sucess
+
+
+class DiskDiffusionOracleDataset(BaseDataset):
+    """
+    Dataset that loads episodes as individual files from disk.
+
+    Args:
+        num_subgoals: Number of subgoals per episodes.
+        save_format: File format in datasets_dir (pkl or npz).
+        pretrain: Set to True when pretraining.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        num_subgoals: int = 1,
+        save_format: str = "npz",
+        pretrain: bool = False,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self.save_format = save_format
+        if self.save_format == "pkl":
+            self.load_file = load_pkl
+        elif self.save_format == "npz":
+            self.load_file = load_npz
+        else:
+            raise NotImplementedError
+        self.pretrain = pretrain
+        self.num_subgoals = num_subgoals
+        if self.with_lang:
+            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+                self._build_file_indices_lang(self.abs_datasets_dir)
+            )
+        else:
+            self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
+
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
+        )
+
+    def _get_episode_name(self, file_idx: int) -> Path:
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
+
+    def _get_dino_feat_name(self, file_idx: int) -> Path:
+        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+
+    def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
+        """
+        Load num_goals frames of the episodes (plus the initial frame) evenly spaced.
+
+        Args:
+            idx: Index of first frame.
+        Returns:
+            episode: Dict of numpy arrays containing the episode where keys are the names of modalities.
+        """
+        start_idx, end_idx = self.episode_lookup[idx]
+
+        keys = list(chain(*self.observation_space.values()))
+        keys.remove("language")
+        keys.append("scene_obs")
+        episodes_idx = np.linspace(
+            start_idx,
+            end_idx,
+            min(self.max_window_size, self.num_subgoals + 1),
+            dtype=int,
+        )
+        episodes = [
+            self.load_file(self._get_episode_name(file_idx))
+            for file_idx in episodes_idx
+        ]
+
+        episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
+        if self.with_lang:
+            episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+        if self.with_dino_feat:
+            dino_features = [
+                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+                for file_idx in episodes_idx
+            ]
+            episode["dino_features"] = dino_features
+        return episode
+
+    def _build_file_indices_lang(
+        self, abs_datasets_dir: Path
+    ) -> Tuple[np.ndarray, List, np.ndarray]:
+        """
+        This method builds the mapping from index to file_name used for loading the episodes of the language dataset.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+            lang_lookup: Mapping from training example to index of language instruction.
+            lang_ann: Language tasks.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        episode_lookup = []
+
+        # Load lang data from pickle
+        try:
+            print(
+                "trying to load lang data from: ",
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                allow_pickle=True,
+            ).item()
+        except Exception:
+            print(
+                "Exception, trying to load lang data from: ",
+                abs_datasets_dir / "auto_lang_ann.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+            ).item()
+
+        ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
+        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_lookup = []
+        for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
+            assert end_idx >= self.max_window_size
+            lang_lookup.append(i)
+            episode_lookup.append((start_idx, end_idx))
+        return np.array(episode_lookup), lang_lookup, lang_ann
+
+    def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
+        """
+        Get sequence of dataset.
+
+        Args:
+            idx: Index of the sequence.
+
+        Returns:
+            Loaded sequence.
+        """
+
+        sequence = self._get_sequences(idx)
+        if self.pad:
+            pad_size = self._get_pad_size(sequence)
+            sequence = self._pad_sequence(sequence, pad_size)
+        return sequence
+
+    def _get_sequences(self, idx: int) -> Dict:
+        """
+        Load sequence of length window_size.
+
+        Args:
+            idx: Index of starting frame.
+
+        Returns:
+            dict: Dictionary of tensors of loaded sequence with different input modalities and actions.
+        """
+
+        episode = self._load_episode(idx)
+
+        seq_state_obs = process_state(
+            episode, self.observation_space, self.transforms, self.proprio_state
+        )
+        seq_rgb_obs = process_rgb(episode, self.observation_space, self.transforms)
+        seq_depth_obs = process_depth(episode, self.observation_space, self.transforms)
+        seq_acts = process_actions(episode, self.observation_space, self.transforms)
+        info = get_state_info_dict(episode)
+        seq_lang = process_language(episode, self.transforms, self.with_lang)
+        seq_feat = process_features(episode, self.transforms, self.with_dino_feat)
+        seq_dict = {
+            **seq_state_obs,
+            **seq_rgb_obs,
+            **seq_depth_obs,
+            **seq_acts,
+            **info,
+            **seq_lang,
+            **seq_feat,
+        }  # type:ignore
+        seq_dict["idx"] = idx  # type:ignore
+
+        return seq_dict
+
+    def _get_pad_size(self, sequence: Dict) -> int:
+        """
+        Determine how many frames to append to end of the sequence
+
+        Args:
+            sequence: Loaded sequence.
+
+        Returns:
+            Number of frames to pad.
+        """
+        return self.num_subgoals + 1 - len(sequence["actions"])
+
+    def _pad_sequence(self, seq: Dict, pad_size: int) -> Dict:
+        """
+        Pad a sequence by repeating the last frame.
+
+        Args:
+            seq: Sequence to pad.
+            pad_size: Number of frames to pad.
+
+        Returns:
+            Padded sequence.
+        """
+        seq.update({"robot_obs": self._pad_with_repetition(seq["robot_obs"], pad_size)})
+        seq.update(
+            {
+                "rgb_obs": {
+                    k: self._pad_with_repetition(v, pad_size)
+                    for k, v in seq["rgb_obs"].items()
+                }
+            }
+        )
+        seq.update(
+            {
+                "depth_obs": {
+                    k: self._pad_with_repetition(v, pad_size)
+                    for k, v in seq["depth_obs"].items()
+                }
+            }
+        )
+        #  todo: find better way of distinguishing rk and play action spaces
+        if not self.relative_actions:
+            # repeat action for world coordinates action space
+            seq.update({"actions": self._pad_with_repetition(seq["actions"], pad_size)})
+        else:
+            # for relative actions zero pad all but the last action dims and repeat last action dim (gripper action)
+            seq_acts = torch.cat(
+                [
+                    self._pad_with_zeros(seq["actions"][..., :-1], pad_size),
+                    self._pad_with_repetition(seq["actions"][..., -1:], pad_size),
+                ],
+                dim=-1,
+            )
+            seq.update({"actions": seq_acts})
+        seq.update(
+            {
+                "state_info": {
+                    k: self._pad_with_repetition(v, pad_size)
+                    for k, v in seq["state_info"].items()
+                }
+            }
+        )
+        return seq
+
+    @staticmethod
+    def _pad_with_repetition(input_tensor: torch.Tensor, pad_size: int) -> torch.Tensor:
+        """
+        Pad a sequence Tensor by repeating last element pad_size times.
+
+        Args:
+            input_tensor: Sequence to pad.
+            pad_size: Number of frames to pad.
+
+        Returns:
+            Padded Tensor.
+        """
+        last_repeated = torch.repeat_interleave(
+            torch.unsqueeze(input_tensor[-1], dim=0), repeats=pad_size, dim=0
+        )
+        padded = torch.vstack((input_tensor, last_repeated))
+        return padded
+
+    @staticmethod
+    def _pad_with_zeros(input_tensor: torch.Tensor, pad_size: int) -> torch.Tensor:
+        """
+        Pad a Tensor with zeros.
+
+        Args:
+            input_tensor: Sequence to pad.
+            pad_size: Number of frames to pad.
+
+        Returns:
+            Padded Tensor.
+        """
+        zeros_repeated = torch.repeat_interleave(
+            torch.unsqueeze(torch.zeros(input_tensor.shape[-1]), dim=0),
+            repeats=pad_size,
+            dim=0,
+        )
+        padded = torch.vstack((input_tensor, zeros_repeated))
+        return padded
