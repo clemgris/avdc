@@ -35,7 +35,7 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    results_folder = "../results_single_debug"
+    results_folder = "../results_huit/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
@@ -67,7 +67,7 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "num_subgoals": 1,
+                    "num_subgoals": 8,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -111,6 +111,7 @@ def main(args):
 
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
+        valid_n = 0
     else:
         train_set = data_module.train_datasets["lang"]
         valid_set = data_module.val_datasets["lang"]
