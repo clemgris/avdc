@@ -605,7 +605,7 @@ class DiskActionDataset(BaseDataset):
         end_image = sequence["rgb_obs"]["rgb_static"][-1]
         # Stack start and end images
         start_end_images = np.stack([start_image, end_image], dtype=np.float32)
-        state = np.zeros((2, 2), dtype=np.float32)
+        state = np.zeros((2, 0), dtype=np.float32)
         action_is_pad = np.zeros_like(actions, dtype=np.int32)
 
         res = {
