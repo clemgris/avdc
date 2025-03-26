@@ -98,13 +98,27 @@ def process_rgb(
 
 
 def process_features(
-    episode: Dict[str, np.ndarray], transforms: Dict, with_dino_feat: bool
+    episode: Dict[str, np.ndarray],
+    with_dino_feat: bool,
+    dino_stats_path: str,
+    norm_dino_feat: bool,
 ) -> Dict[str, Dict[str, torch.Tensor]]:
     seq_dino_feat = {"dino_features": torch.empty(0)}
     if with_dino_feat:
-        seq_dino_feat_ = torch.tensor(episode["dino_features"])
-        if "dino_features" in transforms:
-            seq_dino_feat_ = transforms["dino_features"](seq_dino_feat_)
+        seq_dino_feat_ = torch.tensor(np.array(episode["dino_features"]))
+        if norm_dino_feat:
+            if os.path.exists(dino_stats_path):
+                dino_stats = torch.load(dino_stats_path)["dino_features"]
+                # MinMax normalization
+                seq_dino_feat_ = (seq_dino_feat_ - dino_stats["min"]) / (
+                    dino_stats["max"] - dino_stats["min"]
+                )
+                # In [-1, 1]
+                seq_dino_feat_ = seq_dino_feat_ * 2 - 1
+            else:
+                raise FileNotFoundError(
+                    f"Path to dino features statistics {dino_stats_path} not found"
+                )
         seq_dino_feat["dino_features"] = seq_dino_feat_
     return seq_dino_feat
 

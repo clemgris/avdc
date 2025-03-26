@@ -15,6 +15,20 @@ class ScaleImageTensor(object):
         return tensor.float().div(255)
 
 
+class MinMaxNormalize(object):
+    """Normalize a tensor to [-1, 1] range."""
+
+    def __init__(self, min=0.0, max=1.0):
+        self.min = min
+        self.max = max
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        assert isinstance(tensor, torch.Tensor)
+        norm_tensor = (tensor - self.min()) / (self.max() - self.min())
+        norm_tensor = norm_tensor * 2 - 1
+        return norm_tensor
+
+
 class NormalizeVector(object):
     """Normalize a tensor vector with mean and standard deviation."""
 

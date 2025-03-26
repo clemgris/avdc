@@ -273,7 +273,9 @@ class DiskImageDataset(BaseDataset):
         sample["dino_features"] = dino_feat["patch_emb"]
 
         rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
-        dino_feat = process_features(sample, self.transforms, self.with_dino_feat)
+        dino_feat = process_features(
+            sample, self.with_dino_feat, self.dino_stats_path, self.norm_dino_feat
+        )
         sample = {**rgb_obs, **dino_feat}
 
         image = sample["rgb_obs"]["rgb_static"].squeeze(0)
@@ -774,7 +776,9 @@ class DiskEvaluatorDataset(BaseDataset):
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
-        seq_feat = process_features(episode, self.transforms, self.with_dino_feat)
+        seq_feat = process_features(
+            episode, self.with_dino_feat, self.dino_stats_path, self.norm_dino_feat
+        )
         seq_dict = {
             **seq_state_obs,
             **seq_rgb_obs,
@@ -813,7 +817,7 @@ class DiskEvaluatorDataset(BaseDataset):
             init = images[0]
             target = images[1]
         task = sequence["lang"]
-        return target, task, sucess
+        return init, target, task, sucess
 
 
 class DiskDiffusionOracleDataset(BaseDataset):
@@ -983,7 +987,9 @@ class DiskDiffusionOracleDataset(BaseDataset):
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
-        seq_feat = process_features(episode, self.transforms, self.with_dino_feat)
+        seq_feat = process_features(
+            episode, self.with_dino_feat, self.dino_stats_path, self.norm_dino_feat
+        )
         seq_dict = {
             **seq_state_obs,
             **seq_rgb_obs,

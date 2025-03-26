@@ -4,7 +4,6 @@ import logging
 import os
 from collections import Counter
 from pathlib import Path
-from pydoc import locate
 
 import cv2
 import hydra
@@ -50,20 +49,21 @@ def get_default_model_and_env(
             rollout_cfg.env_cfg, dataset, device, show_gui=False
         )
 
-    checkpoint = format_sftp_path(checkpoint)
-    print(f"Loading model from {checkpoint}")
-    # import the model class that was used for the training
-    model_cls = locate(cfg.model._target_)
-    model = model_cls.load_from_checkpoint(checkpoint)
-    model.load_lang_embeddings(
-        dataset.abs_datasets_dir / dataset.lang_folder / "embeddings.npy"
-    )
-    model.freeze()
-    if cfg.model.action_decoder.get("load_action_bounds", False):
-        model.action_decoder._setup_action_bounds(
-            cfg.datamodule.root_data_dir, None, None, True
-        )
-    model = model.cuda(device)
+    # checkpoint = format_sftp_path(checkpoint)
+    # print(f"Loading model from {checkpoint}")
+    # # import the model class that was used for the training
+    # model_cls = locate(cfg.model._target_)
+    # model = model_cls.load_from_checkpoint(checkpoint)
+    # model.load_lang_embeddings(
+    #     dataset.abs_datasets_dir / dataset.lang_folder / "embeddings.npy"
+    # )
+    # model.freeze()
+    # if cfg.model.action_decoder.get("load_action_bounds", False):
+    #     model.action_decoder._setup_action_bounds(
+    #         cfg.datamodule.root_data_dir, None, None, True
+    #     )
+    # model = model.cuda(device)
+    model = None
     print("Successfully loaded model.")
 
     return model, env, data_module
