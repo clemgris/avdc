@@ -3,6 +3,9 @@ import os
 import sys
 from pathlib import Path
 
+import torch
+from einops import rearrange
+
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
 sys.path.append(
@@ -12,7 +15,6 @@ sys.path.append(
     )
 )
 
-import torch
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
@@ -32,10 +34,11 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 
 print(f"CUDA available: {torch.cuda.is_available()}")
 print(f"Total GPUs available: {torch.cuda.device_count()}")
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 def main(args):
-    results_folder = "../results_huit/calvin"
+    results_folder = "../results_huit_dino/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
@@ -71,7 +74,8 @@ def main(args):
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
-                    "diffuse_on": "pixel",
+                    "diffuse_on": "dino_feat",  # "pixel"
+                    "norm_dino_feat": True,  # Min Max Normalization
                 },
             },
         }
@@ -81,8 +85,14 @@ def main(args):
 
     if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
         target_size = (16, 16)
-    else:
+        channel = 768
+    elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
         target_size = (96, 96)
+        channel = 3
+    else:
+        raise ValueError(
+            f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."
+        )
 
     transforms = OmegaConf.load(
         os.path.join(
@@ -139,22 +149,45 @@ def main(args):
         #     if idx > 10: break
         # breakpoint()
 
-    unet = Unet()
+    unet = Unet(channel)
 
     if args.server == "jz":
-        pretrained_model = (
+        text_pretrained_model = (
             "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
         )
     else:
-        pretrained_model = "openai/clip-vit-base-patch32"
+        text_pretrained_model = "openai/clip-vit-base-patch32"
 
-    tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
-    text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
+    tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
+    text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
+    if args.server == "jz":
+        decoder_weigth_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/results_decoder/calvin/decoder_model_48.pth"
+    else:
+        decoder_weigth_path = "/home/grislain/AVDC/calvin/models/decoder_model_48.pth"
+
+    if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+        import torch
+        from decoder import TransposedConvDecoder
+
+        decoder_model = TransposedConvDecoder(
+            emb_dim=768,
+            observation_shape=(3, 96, 96),
+            patch_size=16,
+        )
+        state_dict = torch.load(decoder_weigth_path)
+        state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
+        decoder_model.load_state_dict(state_dict)
+        decoder_model = decoder_model.to(device)
+        decoder_model.eval()
+
+    else:
+        decoder_model = None
+
     diffusion = GoalGaussianDiffusion(
-        channels=3 * (sample_per_seq - 1),
+        channels=channel * (sample_per_seq - 1),
         model=unet,
         image_size=target_size,
         timesteps=100,
@@ -170,10 +203,11 @@ def main(args):
         diffusion_model=diffusion,
         tokenizer=tokenizer,
         text_encoder=text_encoder,
+        feature_decoder=decoder_model,
         train_set=train_set,
         valid_set=valid_set,
         train_lr=1e-4,
-        train_num_steps=60000,
+        train_num_steps=150000,
         save_and_sample_every=2500,
         ema_update_every=10,
         ema_decay=0.999,
@@ -185,6 +219,8 @@ def main(args):
         fp16=True,
         amp=True,
         calculate_fid=False,
+        dino_stats_path=os.path.join(cfg.root, "dino_stats.pt"),
+        norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
     )
 
     if args.checkpoint_num is not None:
@@ -209,24 +245,83 @@ def main(args):
         image.save(str(results_folder / "test_imgs / test_img.png"))
 
         batch_size = 1
-        transform = transforms.Compose(
-            [
-                transforms.Resize(target_size),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5], std=[0.5]),
-            ]
-        )
-        image = transform(image)
-        for i in range(args.num_samples):
-            output = trainer.sample(
-                image.unsqueeze(0), [text], batch_size, guidance_weight
-            ).cpu()
+        if cfg.datamodule.lang_dataset.diffuse_on == "pixel":
+            transform = transforms.Compose(
+                [
+                    transforms.Resize(target_size),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=[0.5], std=[0.5]),
+                ]
+            )
+            image = transform(image)
+            for i in range(args.num_samples):
+                output = trainer.sample(
+                    image.unsqueeze(0), [text], batch_size, guidance_weight
+                ).cpu()
 
-            # Unnormalize
-            output = output * 0.5 + 0.5
+                # Unnormalize
+                output = (output + 1) / 2
+                image = (image + 1) / 2
+                output = output[0].reshape(-1, 3, *target_size)
 
-            output = output[0].reshape(-1, 3, *target_size)
-            output = torch.cat([image.unsqueeze(0) * 0.5 + 0.5, output], dim=0)
+        elif cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+            from decoder import TransposedConvDecoder
+            from encoder import DinoV2Encoder
+
+            transform = transforms.Compose(
+                [
+                    transforms.Resize(target_size),
+                    transforms.ToTensor(),
+                ]
+            )
+
+            image = transform(image)
+
+            if args.server == "jz":
+                encoder_name = (
+                    "/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base",
+                )
+            else:
+                encoder_name = "facebook/dinov2-base"
+
+            encoder_model = DinoV2Encoder(name=encoder_name)
+
+            # Load statistics
+            dino_stats_path = os.path.join(cfg.root, "dino_stats.pt")
+            dino_stats = torch.load(dino_stats_path)["dino_features"]
+            # Generate samples
+            _, init_feat = encoder_model(image[None, ...].to(device))
+
+            if cfg.datamodule.lang_dataset.norm_dino_feat:
+                # Normalise init_feat
+                init_feat = (init_feat - dino_stats["min"]) / (
+                    dino_stats["max"] - dino_stats["min"]
+                )
+                init_feat = init_feat * 2 - 1
+            init_feat = rearrange(init_feat, "b (h w) c -> b c h w ", w=16, h=16)
+            for i in range(args.num_samples):
+                output = trainer.sample(
+                    init_feat, [text], batch_size, guidance_weight
+                ).cpu()
+                output = rearrange(
+                    output,
+                    "b (n c) h w -> b n (h w) c",
+                    w=16,
+                    h=16,
+                    n=(sample_per_seq - 1),
+                )
+                if cfg.datamodule.lang_dataset.norm_dino_feat:
+                    # Unnormalize
+                    output = (output + 1) / 2
+                    output = (
+                        output * (dino_stats["max"] - dino_stats["min"])
+                        + dino_stats["min"]
+                    )
+
+                output = trainer.feature_decoder(output.to(device)).detach().cpu()
+
+            # Save output
+            output = torch.cat([image[None], output], dim=0)
             utils.save_image(
                 output,
                 os.path.join(
@@ -247,6 +342,10 @@ def main(args):
             ).astype("uint8")
             imageio.mimsave(output_gif, output, duration=200, loop=1000)
             print(f"Generated {output_gif}")
+        else:
+            raise ValueError(
+                f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."
+            )
 
 
 if __name__ == "__main__":
@@ -268,7 +367,7 @@ if __name__ == "__main__":
     )  # set to checkpoint number to resume training or generate samples
     parser.add_argument(
         "-p", "--inference_path", type=str, default=None
-    )  # set to path to generate samples
+    )  # set to get initial image
     parser.add_argument(
         "-t", "--text", type=str, default=None
     )  # set to text to generate samples
@@ -278,6 +377,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-g", "--guidance_weight", type=int, default=0
     )  # set to positive to use guidance
+    # parser.add_argument(
+    #     "-d", "--decoder_checkpoint_path", type=str, default=None
+    # )  # set to decoder checkpoint path
     args = parser.parse_args()
     if args.mode == "inference":
         assert args.checkpoint_num is not None
