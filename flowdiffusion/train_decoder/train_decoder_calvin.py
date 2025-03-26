@@ -161,6 +161,10 @@ def main(args):
         observation_shape=(3, target_size[0], target_size[0]),
         patch_size=16,
     )
+
+    # Print number of parameters
+    print(f"Number of parameters: {sum(p.numel() for p in decoder_model.parameters())}")
+
     decoder_model = DataParallel(decoder_model)
     decoder_model = decoder_model.to(device)
     decoder_model.train()
@@ -181,7 +185,6 @@ def main(args):
             image, patch_emb = data
             patch_emb = patch_emb.to(device)
             image = image.to(device)
-
             rec_image = decoder_model(patch_emb)
 
             optimizer.zero_grad()
