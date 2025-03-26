@@ -841,6 +841,7 @@ class Trainer(object):
         diffusion_model,
         tokenizer,
         text_encoder,
+        feature_decoder,
         train_set,
         valid_set,
         channels=3,
@@ -864,6 +865,8 @@ class Trainer(object):
         calculate_fid=True,
         inception_block_idx=2048,
         cond_drop_chance=0.1,
+        dino_stats_path=None,
+        norm_feat=True,
     ):
         super().__init__()
 
@@ -871,6 +874,10 @@ class Trainer(object):
 
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
+
+        self.feature_decoder = feature_decoder
+        self.features_stats = torch.load(dino_stats_path)["dino_features"]
+        self.norm_feat = norm_feat
 
         # accelerator
 
@@ -1127,7 +1134,7 @@ class Trainer(object):
 
                         gt_xs = torch.cat(xs, dim=0)  # [batch_size, 3*n, 120, 160]
                         # make it [batchsize*n, 3, 120, 160]
-                        n_rows = gt_xs.shape[1] // 3
+                        n_rows = gt_xs.shape[1] // self.model.model.in_channels
                         gt_xs = rearrange(gt_xs, "b (n c) h w -> b n c h w", n=n_rows)
                         ### save images
                         x_conds = torch.cat(x_conds, dim=0).detach().cpu()
@@ -1136,7 +1143,6 @@ class Trainer(object):
                         all_xs = rearrange(all_xs, "b (n c) h w -> b n c h w", n=n_rows)
 
                         gt_first = x_conds
-
                         if self.step == self.save_and_sample_every:
                             os.makedirs(
                                 str(self.results_folder / "val_imgs"), exist_ok=True
@@ -1145,6 +1151,30 @@ class Trainer(object):
                             gt_img = rearrange(
                                 gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
+                            if self.model.model.in_channels > 3:
+                                assert self.feature_decoder is not None
+                                assert self.features_stats is not None
+
+                                gt_img = rearrange(
+                                    gt_img,
+                                    "(b n) c h w -> (b n) (h w) c ",
+                                    n=n_rows + 1,
+                                )
+
+                                if self.norm_feat:
+                                    # Unormalise
+                                    gt_img = (gt_img + 1) / 2
+                                    gt_img = (
+                                        gt_img
+                                        * (
+                                            self.features_stats["max"]
+                                            - self.features_stats["min"]
+                                        )
+                                        + self.features_stats["min"]
+                                    )
+                                # Decode features into image
+                                gt_img = self.feature_decoder(gt_img.to(device))
+
                             utils.save_image(
                                 gt_img,
                                 str(self.results_folder / "val_imgs/gt_img.png"),
@@ -1162,6 +1192,28 @@ class Trainer(object):
                         pred_img = rearrange(
                             pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
+                        if self.model.model.in_channels > 3:
+                            assert self.feature_decoder is not None
+                            assert self.features_stats is not None
+
+                            pred_img = rearrange(
+                                pred_img, "(b n) c h w -> (b n) (h w) c ", n=n_rows + 1
+                            )
+
+                            if self.norm_feat:
+                                # Unormalise
+                                pred_img = (pred_img + 1) / 2
+                                pred_img = (
+                                    pred_img
+                                    * (
+                                        self.features_stats["max"]
+                                        - self.features_stats["min"]
+                                    )
+                                    + self.features_stats["min"]
+                                )
+                            # Decode features into image
+                            pred_img = self.feature_decoder(pred_img.to(device))
+
                         utils.save_image(
                             pred_img,
                             str(
