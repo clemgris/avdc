@@ -38,13 +38,14 @@ class UnetBridge(nn.Module):
 
 
 class UnetMW(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels: int):
         super(UnetMW, self).__init__()
+        self.in_channels = in_channels
         self.unet = UNetModel(
             image_size=(128, 128),
-            in_channels=6,
+            in_channels=self.in_channels * 2,
             model_channels=128,
-            out_channels=3,
+            out_channels=self.in_channels,
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
@@ -60,9 +61,11 @@ class UnetMW(nn.Module):
         )
 
     def forward(self, x, t, task_embed=None, **kwargs):
-        f = x.shape[1] // 3 - 1
-        x_cond = repeat(x[:, -3:], "b c h w -> b c f h w", f=f)
-        x = rearrange(x[:, :-3], "b (f c) h w -> b c f h w", c=3)
+        f = x.shape[1] // self.in_channels - 1
+        x_cond = repeat(x[:, -self.in_channels :], "b c h w -> b c f h w", f=f)
+        x = rearrange(
+            x[:, : -self.in_channels], "b (f c) h w -> b c f h w", c=self.in_channels
+        )
         x = torch.cat([x, x_cond], dim=1)
         out = self.unet(x, t, task_embed, **kwargs)
         return rearrange(out, "b c f h w -> b (f c) h w")
