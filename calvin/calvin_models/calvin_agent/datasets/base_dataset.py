@@ -75,6 +75,7 @@ class BaseDataset(Dataset):
         pad: bool = True,
         aux_lang_loss_window: int = 1,
         diffuse_on: str = "pixel",
+        norm_dino_feat: bool = False,
     ):
         self.observation_space = obs_space
         self.proprio_state = proprio_state
@@ -99,6 +100,9 @@ class BaseDataset(Dataset):
         assert self.abs_datasets_dir.is_dir()
         logger.info(f"loading dataset at {self.abs_datasets_dir}")
         logger.info("finished loading dataset")
+
+        self.dino_stats_path = self.abs_datasets_dir / "../dino_stats.pt"
+        self.norm_dino_feat = norm_dino_feat
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
         """
@@ -157,7 +161,9 @@ class BaseDataset(Dataset):
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
-        seq_feat = process_features(episode, self.transforms, self.with_dino_feat)
+        seq_feat = process_features(
+            episode, self.with_dino_feat, self.dino_stats_path, self.norm_dino_feat
+        )
         seq_dict = {
             **seq_state_obs,
             **seq_rgb_obs,

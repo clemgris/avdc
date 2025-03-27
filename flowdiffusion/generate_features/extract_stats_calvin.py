@@ -131,7 +131,7 @@ def extract_stats(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--server", type=str, default="hacienda"
+        "-s", "--server", type=str, default="hacienda"
     )  # set to "jz" to run on jean zay server
     parser.add_argument(
         "-o", "--override", type=bool, default=False
