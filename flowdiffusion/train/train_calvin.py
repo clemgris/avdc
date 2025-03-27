@@ -264,6 +264,32 @@ def main(args):
                 image = (image + 1) / 2
                 output = output[0].reshape(-1, 3, *target_size)
 
+                # Save output
+                output = torch.cat([image[None], output], dim=0)
+                utils.save_image(
+                    output,
+                    os.path.join(
+                        str(
+                            results_folder
+                            / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                        ),
+                        f"{text.replace(' ', '_')}_sample-{i}.png",
+                    ),
+                    nrow=sample_per_seq,
+                )
+                output_gif = os.path.join(
+                    str(
+                        results_folder
+                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                    ),
+                    f"{text.replace(' ', '_')}_sample-{i}.gif",
+                )
+                output = (
+                    output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255
+                ).astype("uint8")
+                imageio.mimsave(output_gif, output, duration=200, loop=1000)
+                print(f"Generated {output_gif}")
+
         elif cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
             from decoder import TransposedConvDecoder
             from encoder import DinoV2Encoder
@@ -319,29 +345,36 @@ def main(args):
                     )
 
                 output = trainer.feature_decoder(output.to(device)).detach().cpu()
+
+                # Save output
+                output = torch.cat([image[None], output], dim=0)
+                utils.save_image(
+                    output,
+                    os.path.join(
+                        str(
+                            results_folder
+                            / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                        ),
+                        f"{text.replace(' ', '_')}_sample-{i}.png",
+                    ),
+                    nrow=sample_per_seq,
+                )
+                output_gif = os.path.join(
+                    str(
+                        results_folder
+                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
+                    ),
+                    f"{text.replace(' ', '_')}_sample-{i}.gif",
+                )
+                output = (
+                    output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255
+                ).astype("uint8")
+                imageio.mimsave(output_gif, output, duration=200, loop=1000)
+                print(f"Generated {output_gif}")
         else:
             raise ValueError(
                 f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."
             )
-        # Save output
-        output = torch.cat([image[None], output], dim=0)
-        utils.save_image(
-            output,
-            os.path.join(
-                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
-                f"{text.replace(' ', '_')}_sample-{i}.png",
-            ),
-            nrow=sample_per_seq,
-        )
-        output_gif = os.path.join(
-            str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
-            f"{text.replace(' ', '_')}_sample-{i}.gif",
-        )
-        output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype(
-            "uint8"
-        )
-        imageio.mimsave(output_gif, output, duration=200, loop=1000)
-        print(f"Generated {output_gif}")
 
 
 if __name__ == "__main__":
