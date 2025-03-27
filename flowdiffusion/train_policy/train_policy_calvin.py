@@ -188,6 +188,12 @@ def main(args):
                 print(f"step: {step} loss: {loss.item():.3f}")
 
             if step % cfg.save_every == 0:
+                # Delete previous checkpoints
+                past_saving_path = os.path.join(
+                    results_folder, f"model-{step // cfg.save_every - 2}.pt"
+                )
+                if os.path.exists(past_saving_path):
+                    os.remove(past_saving_path)
                 # Save model
                 saving_path = os.path.join(
                     results_folder, f"model-{step // cfg.save_every}.pt"
