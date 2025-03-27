@@ -183,12 +183,12 @@ class CustomModel(CalvinBaseModel):
             if self.debug:
                 # Save subgoals
                 self.save_image(
-                    (self.sub_goals[0] + 1) / 2,
+                    self.sub_goals[0],
                     f"oracle_subgoals_{text_goal}.png",
                 )
                 # Save initial frame
                 self.save_image(
-                    (oracle_subgoals["rgb_obs"]["rgb_static"][0] + 1) / 2,
+                    oracle_subgoals["rgb_obs"]["rgb_static"][0],
                     f"oracle_init_{text_goal}.png",
                 )
         else:
@@ -334,9 +334,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate a trained model on multistep sequences with language goals."
     )
-    parser.add_argument(
-        "--dataset_path", type=str, help="Path to the dataset root directory."
-    )
 
     parser.add_argument(
         "--eval_log_dir",
@@ -434,7 +431,12 @@ if __name__ == "__main__":
     # Do not change
     args.ep_len = 240
 
-    data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    if args.server == "jz":
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
+    elif args.server == "hacienda":
+        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    else:
+        raise ValueError("Invalid server argument")
 
     # High level config
     high_level_cfg = DictConfig(
