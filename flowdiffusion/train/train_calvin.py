@@ -38,7 +38,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 def main(args):
-    results_folder = "../results_huit_dino/calvin"
+    results_folder = "../results_huit/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
@@ -74,8 +74,8 @@ def main(args):
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
-                    "diffuse_on": "dino_feat",  # "pixel"
-                    "norm_dino_feat": True,  # Min Max Normalization
+                    "diffuse_on": "pixel",  # "dino_feat",  # "pixel"
+                    "norm_dino_feat": False,  # True,  # Min Max Normalization
                 },
             },
         }
@@ -319,33 +319,29 @@ def main(args):
                     )
 
                 output = trainer.feature_decoder(output.to(device)).detach().cpu()
-
-            # Save output
-            output = torch.cat([image[None], output], dim=0)
-            utils.save_image(
-                output,
-                os.path.join(
-                    str(
-                        results_folder
-                        / f"test_imgs / outputs / {text.replace(' ', '_')}"
-                    ),
-                    f"{text.replace(' ', '_')}_sample-{i}.png",
-                ),
-                nrow=sample_per_seq,
-            )
-            output_gif = os.path.join(
-                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
-                f"{text.replace(' ', '_')}_sample-{i}.gif",
-            )
-            output = (
-                output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255
-            ).astype("uint8")
-            imageio.mimsave(output_gif, output, duration=200, loop=1000)
-            print(f"Generated {output_gif}")
         else:
             raise ValueError(
                 f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."
             )
+        # Save output
+        output = torch.cat([image[None], output], dim=0)
+        utils.save_image(
+            output,
+            os.path.join(
+                str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
+                f"{text.replace(' ', '_')}_sample-{i}.png",
+            ),
+            nrow=sample_per_seq,
+        )
+        output_gif = os.path.join(
+            str(results_folder / f"test_imgs / outputs / {text.replace(' ', '_')}"),
+            f"{text.replace(' ', '_')}_sample-{i}.gif",
+        )
+        output = (output.cpu().numpy().transpose(0, 2, 3, 1).clip(0, 1) * 255).astype(
+            "uint8"
+        )
+        imageio.mimsave(output_gif, output, duration=200, loop=1000)
+        print(f"Generated {output_gif}")
 
 
 if __name__ == "__main__":
