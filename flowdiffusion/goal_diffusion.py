@@ -875,10 +875,6 @@ class Trainer(object):
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
 
-        self.feature_decoder = feature_decoder
-        self.features_stats = torch.load(dino_stats_path)["dino_features"]
-        self.norm_feat = norm_feat
-
         # accelerator
 
         self.accelerator = Accelerator(
@@ -900,6 +896,16 @@ class Trainer(object):
             print(f"Number of parameters: {self.num_params}")
 
         self.channels = channels
+
+        #  Feature decoder and feature statistics if not diffusion on RGB images
+        if self.model.model.in_channels > 3:
+            self.feature_decoder = feature_decoder
+            self.features_stats = torch.load(dino_stats_path)["dino_features"]
+            self.norm_feat = norm_feat
+        else:
+            self.feature_decoder = None
+            self.features_stats = None
+            self.norm_feat = False
 
         # InceptionV3 for fid-score computation
 
