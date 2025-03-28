@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+import numpy as np
 from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -38,7 +39,7 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    results_folder = "../results_policy_huit/calvin"
+    results_folder = "../results_policy_single/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
@@ -70,7 +71,7 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "num_subgoals": 8,
+                    "num_subgoals": 1,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -115,7 +116,13 @@ def main(args):
     diff_cfg = DictConfig(
         {
             "n_obs_steps": 2,
-            "horizon": 8,
+            "horizon": int(
+                np.ceil(
+                    cfg.datamodule.lang_dataset.max_window_size
+                    / cfg.datamodule.lang_dataset.num_subgoals
+                )
+            )
+            - 1,
             "input_shapes": {
                 "observation.image": [3, 96, 96],
                 "observation.state": [0],

@@ -365,7 +365,6 @@ class DiskActionDataset(BaseDataset):
             print(len(self.episode_lookup))
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
-
         self.with_lang = False
 
         self.naming_pattern, self.n_digits = lookup_naming_pattern(
@@ -395,20 +394,21 @@ class DiskActionDataset(BaseDataset):
         start_idx, end_idx, j = self.episode_lookup[idx]
 
         num_frames = end_idx - start_idx + 1
-        chunk_size = num_frames // self.num_subgoals + 1
+        chunk_size = int(np.ceil(num_frames / self.num_subgoals))
 
         keys = list(chain(*self.observation_space.values()))
         keys.remove("language")
         keys.append("scene_obs")
 
-        episodes_idx = np.arange(start_idx, end_idx - chunk_size + 1)
+        episodes_idx = np.arange(start_idx, end_idx + 1 - chunk_size + 1)
 
         # Pick randm frame from the episode except the last one
         frame_idx = episodes_idx[j]
 
         # Action idx are from the frame_idx to the next frame
-        assert frame_idx + chunk_size <= end_idx
+        assert frame_idx + chunk_size <= end_idx + 1
         actions_idx = np.arange(frame_idx, frame_idx + chunk_size)
+
         episodes = [
             self.load_file(self._get_episode_name(file_idx)) for file_idx in actions_idx
         ]
@@ -469,7 +469,7 @@ class DiskActionDataset(BaseDataset):
             lang_lookup.append(i)
             num_frames = end_idx - start_idx + 1
             chunk_size = num_frames // self.num_subgoals + 1
-            for j in range(0, end_idx - start_idx + 1 - chunk_size):
+            for j in range(0, max(1, end_idx - start_idx + 1 - chunk_size)):
                 episode_lookup.append((start_idx, end_idx, j))
 
         return np.array(episode_lookup), lang_lookup, lang_ann
@@ -584,7 +584,9 @@ class DiskActionDataset(BaseDataset):
         Returns:
             Number of frames to pad.
         """
-        return self.max_window_size // self.num_subgoals + 1 - len(sequence["actions"])
+        return int(np.ceil(self.max_window_size / self.num_subgoals)) - len(
+            sequence["actions"]
+        )
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
         """
