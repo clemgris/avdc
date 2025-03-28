@@ -688,7 +688,9 @@ class DiskEvaluatorDataset(BaseDataset):
         else:
             # Negative example
             # Select frame frome another episode which has a different goal
-            possible_episode_idx = np.where(self.lang_lookup != self.lang_lookup[idx])
+            possible_episode_idx = np.where(
+                np.array(self.lang_lookup) != self.lang_lookup[idx]
+            )
             episode_idx = np.random.choice(possible_episode_idx[0])
             start_idx, end_idx, _ = self.episode_lookup[episode_idx]
             neg_frame_idx = np.random.choice(range(start_idx, end_idx + 1))
