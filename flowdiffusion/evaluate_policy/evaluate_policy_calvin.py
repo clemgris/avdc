@@ -81,7 +81,6 @@ class CustomModel(CalvinBaseModel):
 
         self.use_oracle_subgoals = cfg.high_level.use_oracle_subgoals
         self.sample_subgoals_every = 8
-
         if not self.use_oracle_subgoals:
             if cfg.high_level.datamodule.lang_dataset.diffuse_on == "pixel":
                 self.high_level_channels = 3
@@ -190,14 +189,13 @@ class CustomModel(CalvinBaseModel):
                 )
         else:
             # Generate sequence of subgoals
-            if self.steps % self.sample_subgoals_every == 0:
+            if self.steps == 0:
                 self.sub_goals = (
                     self.high_level.sample(
-                        obs_image.unsqueeze(0), [text_goal], 1, self.guidance_weight
+                        obs_image[0], [text_goal], 1, self.guidance_weight
                     )
                     .cpu()
                     .detach()
-                    .numpy()
                 )
                 self.sub_goals = rearrange(
                     self.sub_goals, "b (f c) w h -> b f c w h", c=3
@@ -205,7 +203,7 @@ class CustomModel(CalvinBaseModel):
                 if self.debug:
                     # Save subgoals
                     self.save_image(
-                        (self.sub_goals[0] + 1) / 2,
+                        self.sub_goals[0],
                         f"generated_subgoals_{text_goal}.png",
                     )
 
@@ -351,14 +349,14 @@ if __name__ == "__main__":
         "--high_level_checkpoint_num",
         type=int,
         help="High level checkpoint number",
-        default=19,
+        default=40,
     )
 
     parser.add_argument(
         "--high_level_results_folder",
         type=str,
         help="Results folder",
-        default="/home/grislain/AVDC/results_huit/calvin",
+        default="/home/grislain/AVDC/calvin/models/results_huit/calvin",
     )
 
     parser.add_argument(
@@ -377,9 +375,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--use_oracle_subgoals",
-        type=bool,
-        default="True",
+        "--use_oracle_subgoals", action="store_true", help="Use oracle subgoals"
     )
 
     parser.add_argument(
