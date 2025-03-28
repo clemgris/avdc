@@ -37,9 +37,6 @@ import torchvision
 from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
     CalvinDataModule,  # noqa: E402
 )
-from calvin.calvin_models.calvin_agent.evaluation.utils import (
-    join_vis_lang,
-)
 from calvin.calvin_models.calvin_agent.models.calvin_base_model import CalvinBaseModel
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
@@ -232,7 +229,7 @@ class CustomModel(CalvinBaseModel):
 
             state = torch.zeros((2, 0)).to(self.device)
             obs_goal = {
-                "observation.state": torch.tensor(state)[None],
+                "observation.state": state[None],
                 "observation.images": obs_goal_images[None, :, None, ...],
             }
             # Predict action
@@ -312,20 +309,14 @@ def rollout(
         # action = episode["actions"][step]
         action = model.step(obs, lang_annotation, episode)
         obs, _, _, current_info = env.step(action)
-        if args.debug:
-            img = env.render(mode="rgb_array")
-            join_vis_lang(img, lang_annotation)
-            # time.sleep(0.1)
-        # check if current step solves a task
+        # Check if current step solves a task
         current_task_info = task_oracle.get_task_info_for_set(
             start_info, current_info, {task.replace(" ", "_")}
         )
         if len(current_task_info) > 0:
-            if args.debug:
-                print(colored("S", "green"), end=" ")
+            print(colored("S", "green"), end=" ")
             return True
-    if args.debug:
-        print(colored("F", "red"), end=" ")
+    print(colored("F", "red"), end=" ")
     return False
 
 
@@ -433,8 +424,10 @@ if __name__ == "__main__":
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
+        rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
     elif args.server == "hacienda":
         data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+        rollou_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
     else:
         raise ValueError("Invalid server argument")
 
