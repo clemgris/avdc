@@ -5,10 +5,7 @@ from collections import Counter
 
 import PIL.Image as Image
 import torch
-from transformers import (
-    AutoProcessor,
-    LlavaForConditionalGeneration,
-)
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -126,37 +123,19 @@ def main(args):
         target = target.clip(0, 1).numpy()
         target = Image.fromarray((target * 255).astype("uint8").transpose(1, 2, 0))
 
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image"},
-                    {"type": "image"},
-                    {
-                        "type": "text",
-                        "text": f"Has the task {task} been achieved between the two images? (answer by yes or no)",
-                    },
-                ],
-            },
-        ]
-        prompt = vlm_processor.apply_chat_template(
-            conversation, add_generation_prompt=True
-        )
+        prompt = "[INST] <image>\n<image>\nHas the task turn on lightbulb been achieved between the two images? (answer by yes or no) [/INST]"
 
         inputs = vlm_processor(
             images=[init, target], text=prompt, return_tensors="pt"
         ).to(0, torch.float16)
 
         outputs = vlm_model.generate(**inputs, max_new_tokens=200, do_sample=False)
-        print(vlm_processor.decode(outputs[0][2:], skip_special_tokens=True))
+        generated_text = vlm_processor.decode(outputs[0][2:], skip_special_tokens=True)
+        print(generated_text)
 
-        if ("no" in vlm_processor.decode(outputs[0][2:])) or (
-            "No" in vlm_processor.decode(outputs[0][2:])
-        ):
+        if ("no" in generated_text) or ("No" in generated_text):
             pred = 0
-        elif ("yes" in vlm_processor.decode(outputs[0][2:])) or (
-            "Yes" in vlm_processor.decode(outputs[0][2:])
-        ):
+        elif ("yes" in generated_text) or ("Yes" in generated_text):
             pred = 1
         else:
             pred = -1
