@@ -123,10 +123,20 @@ def main(args):
         target = target.clip(0, 1).numpy()
         target = Image.fromarray((target * 255).astype("uint8").transpose(1, 2, 0))
 
-        prompt = "[INST] <image><image>Has the task {} been achieved between the two images? [/INST]"
-        outputs = pipe(
-            [init, target], prompt=prompt, generate_kwargs={"max_new_tokens": 200}
-        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": init},
+                    {"type": "image", "image": target},
+                    {
+                        "type": "text",
+                        "text": f"Has the task {task} been achieved between the two images? (answer by yes or no)",
+                    },
+                ],
+            },
+        ]
+        outputs = pipe(prompt=messages, generate_kwargs={"max_new_tokens": 200})
 
         print(outputs[0]["generated_text"][-1], label)
 

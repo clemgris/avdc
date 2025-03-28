@@ -134,10 +134,20 @@ def main(args):
         target = Image.fromarray((target * 255).astype("uint8").transpose(1, 2, 0))
 
         # VLM - Describe the difference between the first and last images
-        prompt = "[INST] <image><image>\Describe in detail the differences between the two images? [/INST]"
-        outputs = vlm_pipe(
-            [init, target], prompt=prompt, generate_kwargs={"max_new_tokens": 200}
-        )
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image": init},
+                    {"type": "image", "image": target},
+                    {
+                        "type": "text",
+                        "text": "Describe in detail how the scene has changed between the two images?",
+                    },
+                ],
+            },
+        ]
+        outputs = vlm_pipe(prompt=messages, generate_kwargs={"max_new_tokens": 200})
 
         print(outputs[0]["generated_text"])
         parsed_answer = outputs[0]["generated_text"]
