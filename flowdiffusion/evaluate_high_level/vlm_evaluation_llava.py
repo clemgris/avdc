@@ -6,7 +6,8 @@ from collections import Counter
 import PIL.Image as Image
 import torch
 from transformers import (
-    pipeline,
+    AutoProcessor,
+    LlavaForConditionalGeneration,
 )
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -105,11 +106,13 @@ def main(args):
     num_tasks = Counter()
     num_unanswered = Counter()
 
-    pipe = pipeline(
-        "image-text-to-text",
-        model=vlm_path,
-    )  #     model_kwargs={"quantization_config": quantization_config},
-    # )
+    vlm_model = LlavaForConditionalGeneration.from_pretrained(
+        vlm_path,
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True,
+    ).to(0)
+
+    vlm_processor = AutoProcessor.from_pretrained(vlm_path)
 
     for init, target, task, label in train_set:
         print("Task", task)
@@ -123,12 +126,12 @@ def main(args):
         target = target.clip(0, 1).numpy()
         target = Image.fromarray((target * 255).astype("uint8").transpose(1, 2, 0))
 
-        messages = [
+        conversation = [
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "image": init},
-                    {"type": "image", "image": target},
+                    {"type": "image"},
+                    {"type": "image"},
                     {
                         "type": "text",
                         "text": f"Has the task {task} been achieved between the two images? (answer by yes or no)",
@@ -136,16 +139,23 @@ def main(args):
                 ],
             },
         ]
-        outputs = pipe(text=messages, generate_kwargs={"max_new_tokens": 200})
+        prompt = vlm_processor.apply_chat_template(
+            conversation, add_generation_prompt=True
+        )
 
-        print(outputs[0]["generated_text"][-1], label)
+        inputs = vlm_processor(
+            images=[init, target], text=prompt, return_tensors="pt"
+        ).to(0, torch.float16)
 
-        if ("no" in outputs[0]["generated_text"][-1]) or (
-            "No" in outputs[0]["generated_text"][-1]
+        outputs = vlm_model.generate(**inputs, max_new_tokens=200, do_sample=False)
+        print(vlm_processor.decode(outputs[0][2:], skip_special_tokens=True))
+
+        if ("no" in vlm_processor.decode(outputs[0][2:])) or (
+            "No" in vlm_processor.decode(outputs[0][2:])
         ):
             pred = 0
-        elif ("yes" in outputs[0]["generated_text"][-1]) or (
-            "Yes" in outputs[0]["generated_text"][-1]
+        elif ("yes" in vlm_processor.decode(outputs[0][2:])) or (
+            "Yes" in vlm_processor.decode(outputs[0][2:])
         ):
             pred = 1
         else:
