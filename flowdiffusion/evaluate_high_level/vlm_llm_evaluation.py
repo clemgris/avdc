@@ -147,7 +147,7 @@ def main(args):
                 ],
             },
         ]
-        outputs = vlm_pipe(prompt=messages, generate_kwargs={"max_new_tokens": 200})
+        outputs = vlm_pipe(text=messages, generate_kwargs={"max_new_tokens": 200})
 
         print(outputs[0]["generated_text"])
         parsed_answer = outputs[0]["generated_text"]

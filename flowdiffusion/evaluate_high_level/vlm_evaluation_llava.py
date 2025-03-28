@@ -136,7 +136,7 @@ def main(args):
                 ],
             },
         ]
-        outputs = pipe(prompt=messages, generate_kwargs={"max_new_tokens": 200})
+        outputs = pipe(text=messages, generate_kwargs={"max_new_tokens": 200})
 
         print(outputs[0]["generated_text"][-1], label)
 
