@@ -106,7 +106,7 @@ def main(args):
     num_unanswered = Counter()
 
     pipe = pipeline(
-        "image-to-text",
+        "image-text-to-text",
         model=vlm_path,
     )  #     model_kwargs={"quantization_config": quantization_config},
     # )

@@ -110,7 +110,7 @@ def main(args):
     num_tasks = Counter()
 
     vlm_pipe = pipeline(
-        "image-to-text",
+        "image-text-to-text",
         model=vlm_path,
     )
 
