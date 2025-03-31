@@ -495,9 +495,7 @@ if __name__ == "__main__":
         debug_path = Path(config.debug_path)
         os.makedirs(debug_path, exist_ok=True)
 
-    rollout_cfg = OmegaConf.load(
-        "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
-    )
+    rollout_cfg = OmegaConf.load(rollou_cfg_path)
     env = hydra.utils.instantiate(
         rollout_cfg.env_cfg, high_level_dataset, device, show_gui=False
     )
