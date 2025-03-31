@@ -261,11 +261,10 @@ def main(args):
 
                 # Unnormalize
                 output = (output + 1) / 2
-                image = (image + 1) / 2
                 output = output[0].reshape(-1, 3, *target_size)
 
                 # Save output
-                output = torch.cat([image[None], output], dim=0)
+                output = torch.cat([(image[None] + 1) / 2, output], dim=0)
                 utils.save_image(
                     output,
                     os.path.join(
