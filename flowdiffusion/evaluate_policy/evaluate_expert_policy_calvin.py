@@ -255,7 +255,7 @@ if __name__ == "__main__":
         rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
     elif args.server == "hacienda":
         data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
-        rollou_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
+        rollout_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
     else:
         raise ValueError("Invalid server argument")
 
@@ -327,7 +327,7 @@ if __name__ == "__main__":
         debug_path = Path(config.debug_path)
         os.makedirs(debug_path, exist_ok=True)
 
-    rollout_cfg = OmegaConf.load(rollou_cfg_path)
+    rollout_cfg = OmegaConf.load(rollout_cfg_path)
     env = hydra.utils.instantiate(
         rollout_cfg.env_cfg, high_level_dataset, device, show_gui=False
     )
