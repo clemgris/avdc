@@ -92,10 +92,10 @@ class CustomModel(CalvinBaseModel):
             unet = Unet(in_channels=self.high_level_channels)
             unet = unet.to(self.device)
 
-            pretrained_model = (
-                "openai/clip-vit-base-patch32"
-                # "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-            )
+            if cfg.server == "jz":
+                pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+            else:
+                pretrained_model = "openai/clip-vit-base-patch32"
 
             tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
             text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
@@ -416,6 +416,7 @@ if __name__ == "__main__":
             },
             "debug": args.debug,
             "debug_path": "/home/grislain/AVDC/debug",
+            "server": args.server,
         }
     )
 
