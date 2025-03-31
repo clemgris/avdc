@@ -82,7 +82,13 @@ class CustomModel(CalvinBaseModel):
 
 
 def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint):
-    conf_dir = Path("/home/grislain/AVDC/calvin/calvin_models/conf")
+    if args.server == "jz":
+        conf_dir = Path(
+            "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf"
+        )
+    else:
+        conf_dir = Path("/home/grislain/AVDC/calvin/calvin_models/conf")
+
     task_cfg = OmegaConf.load(
         conf_dir / "callbacks/rollout/tasks/new_playtable_tasks.yaml"
     )
