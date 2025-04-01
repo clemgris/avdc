@@ -38,7 +38,7 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 def main(args):
-    results_folder = "../results_huit/calvin"
+    results_folder = "../results_huit_ann/calvin"
 
     if args.server == "jz":
         data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
