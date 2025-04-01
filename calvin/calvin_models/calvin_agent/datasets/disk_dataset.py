@@ -87,7 +87,7 @@ class DiskDiffusionDataset(BaseDataset):
         self.pretrain = pretrain
         self.num_subgoals = num_subgoals
         if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
         else:
@@ -133,6 +133,7 @@ class DiskDiffusionDataset(BaseDataset):
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
@@ -179,14 +180,15 @@ class DiskDiffusionDataset(BaseDataset):
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
-        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_ann = lang_data["language"]["ann"]  # length total number of annotations
+        lang_task = lang_data["language"]["task"]  # length total number of annotations
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
             lang_lookup.append(i)
             episode_lookup.append((start_idx, end_idx))
 
-        return np.array(episode_lookup), lang_lookup, lang_ann
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
 
 class DiskImageDataset(BaseDataset):
@@ -217,7 +219,7 @@ class DiskImageDataset(BaseDataset):
         self.pretrain = pretrain
 
         if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
         else:
@@ -319,14 +321,15 @@ class DiskImageDataset(BaseDataset):
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]
-        lang_ann = lang_data["language"]["task"]
+        lang_ann = lang_data["language"]["ann"]
+        lang_task = lang_data["language"]["task"]
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
             lang_lookup.append(i)
             episode_lookup.append((start_idx, end_idx))
 
-        return np.array(episode_lookup), lang_lookup, lang_ann
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
 
 class DiskActionDataset(BaseDataset):
@@ -359,7 +362,7 @@ class DiskActionDataset(BaseDataset):
         self.num_subgoals = num_subgoals
 
         if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
             print(len(self.episode_lookup))
@@ -416,6 +419,7 @@ class DiskActionDataset(BaseDataset):
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
@@ -462,7 +466,8 @@ class DiskActionDataset(BaseDataset):
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
-        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_ann = lang_data["language"]["ann"]  # length total number of annotations
+        lang_task = lang_data["language"]["task"]  # length total number of annotations
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
@@ -472,7 +477,7 @@ class DiskActionDataset(BaseDataset):
             for j in range(0, max(1, end_idx - start_idx + 1 - chunk_size)):
                 episode_lookup.append((start_idx, end_idx, j))
 
-        return np.array(episode_lookup), lang_lookup, lang_ann
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
     def _pad_sequence(self, seq: Dict, pad_size: int) -> Dict:
         """
@@ -650,7 +655,7 @@ class DiskEvaluatorDataset(BaseDataset):
         self.pretrain = pretrain
         self.num_subgoals = num_subgoals
         if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
         else:
@@ -703,6 +708,7 @@ class DiskEvaluatorDataset(BaseDataset):
         episode = {key: np.stack([ep[key] for ep in frames]) for key in keys}
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
@@ -749,7 +755,8 @@ class DiskEvaluatorDataset(BaseDataset):
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
-        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_ann = lang_data["language"]["ann"]  # length total number of annotations
+        lang_task = lang_data["language"]["task"]  # length total number of annotations
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
@@ -757,7 +764,7 @@ class DiskEvaluatorDataset(BaseDataset):
             lang_lookup.append(i)
             episode_lookup.append((start_idx, end_idx, 0))
             episode_lookup.append((start_idx, end_idx, 1))
-        return np.array(episode_lookup), lang_lookup, lang_ann
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
     def _get_sequences(self, idx: int) -> Dict:
         """
@@ -820,7 +827,8 @@ class DiskEvaluatorDataset(BaseDataset):
         else:
             init = images[0]
             target = images[1]
-        task = sequence["lang"]
+        # task = sequence["lang"]
+        task = sequence["task"]
         return init, target, task, sucess
 
 
@@ -853,7 +861,7 @@ class DiskDiffusionOracleDataset(BaseDataset):
         self.pretrain = pretrain
         self.num_subgoals = num_subgoals
         if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann = (
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
         else:
@@ -898,6 +906,7 @@ class DiskDiffusionOracleDataset(BaseDataset):
 
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
         if self.with_lang:
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
@@ -945,13 +954,14 @@ class DiskDiffusionOracleDataset(BaseDataset):
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
-        lang_ann = lang_data["language"]["task"]  # length total number of annotations
+        lang_ann = lang_data["language"]["ann"]  # length total number of annotations
+        lang_task = lang_data["language"]["task"]  # length total number of annotations
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
             lang_lookup.append(i)
             episode_lookup.append((start_idx, end_idx))
-        return np.array(episode_lookup), lang_lookup, lang_ann
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
         """
