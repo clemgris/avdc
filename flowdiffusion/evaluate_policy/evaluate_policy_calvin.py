@@ -4,6 +4,7 @@ import os
 import pickle
 import sys
 from collections import Counter
+from distutils.util import strtobool
 from pathlib import Path
 
 import hydra
@@ -273,7 +274,7 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
     tot_tasks = Counter()
 
     for episode in high_level_dataset:
-        task = episode["lang"]
+        task = episode["task"]
         results[task] += rollout(
             env, model, episode, task_oracle, args, task, val_annotations
         )
@@ -381,7 +382,10 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--use_oracle_subgoals", action="store_true", help="Use oracle subgoals"
+        "--use_oracle_subgoals",
+        type=lambda x: bool(strtobool(x)),
+        default=False,
+        help="Use oracle subgoals",
     )
 
     parser.add_argument(
@@ -420,7 +424,11 @@ if __name__ == "__main__":
         }
     )
 
-    args = parser.parse_args()
+    if args.use_oracle_subgoals:
+        print("Using oracle subgoals")
+    else:
+        print("Using generated subgoals")
+    breakpoint()
 
     # Do not change
     args.ep_len = 240
