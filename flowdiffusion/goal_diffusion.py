@@ -898,7 +898,14 @@ class Trainer(object):
         self.channels = channels
 
         #  Feature decoder and feature statistics if not diffusion on RGB images
-        if self.model.model.in_channels > 3:
+        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+            self.in_channels = self.model.module.model.in_channels
+        else:
+            self.in_channels = self.model.model.in_channels
+
+        print(f"Number of input channels: {self.in_channels}")
+
+        if self.in_channels > 3:
             self.feature_decoder = feature_decoder
             self.features_stats = torch.load(dino_stats_path)["dino_features"]
             self.norm_feat = norm_feat
@@ -1140,7 +1147,7 @@ class Trainer(object):
 
                         gt_xs = torch.cat(xs, dim=0)  # [batch_size, 3*n, 120, 160]
                         # make it [batchsize*n, 3, 120, 160]
-                        n_rows = gt_xs.shape[1] // self.model.model.in_channels
+                        n_rows = gt_xs.shape[1] // self.in_channels
                         gt_xs = rearrange(gt_xs, "b (n c) h w -> b n c h w", n=n_rows)
                         ### save images
                         x_conds = torch.cat(x_conds, dim=0).detach().cpu()
@@ -1157,7 +1164,7 @@ class Trainer(object):
                             gt_img = rearrange(
                                 gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
-                            if self.model.model.in_channels > 3:
+                            if self.in_channels > 3:
                                 assert self.feature_decoder is not None
                                 assert self.features_stats is not None
 
@@ -1198,7 +1205,7 @@ class Trainer(object):
                         pred_img = rearrange(
                             pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
-                        if self.model.model.in_channels > 3:
+                        if self.in_channels > 3:
                             assert self.feature_decoder is not None
                             assert self.features_stats is not None
 
