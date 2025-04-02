@@ -898,12 +898,9 @@ class Trainer(object):
         self.channels = channels
 
         #  Feature decoder and feature statistics if not diffusion on RGB images
-        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
-            self.in_channels = self.model.module.model.in_channels
-        else:
-            self.in_channels = self.model.model.in_channels
-
-        print(f"Number of input channels: {self.in_channels}")
+        self.in_channels = self.model.model.in_channels
+        if self.accelerator.is_main_process:
+            print(f"Number of input channels: {self.in_channels}")
 
         if self.in_channels > 3:
             self.feature_decoder = feature_decoder
