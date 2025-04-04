@@ -1184,6 +1184,9 @@ class Trainer(object):
                                     )
                                 # Decode features into image
                                 gt_img = self.feature_decoder(gt_img.to(device))
+                            else:
+                                # Unormalise
+                                gt_img = (gt_img + 1) / 2
 
                             utils.save_image(
                                 gt_img,
