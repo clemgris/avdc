@@ -38,12 +38,8 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
 def main(args):
-    results_folder = "../results_huit_ann/calvin"
-
-    if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
-    else:
-        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    results_folder = args.results_folder
+    data_path = args.data_path
 
     cfg = DictConfig(
         {
@@ -53,7 +49,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
-                    "batch_size": 32,
+                    "batch_size": 8,
                     "min_window_size": 16,
                     "max_window_size": 65,
                     "proprio_state": {
@@ -70,14 +66,16 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "num_subgoals": 8,
+                    "num_subgoals": args.num_subgoals,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
-                    "diffuse_on": "pixel",  # "dino_feat",  # "pixel"
-                    "norm_dino_feat": False,  # True,  # Min Max Normalization
+                    "diffuse_on": args.diffuse_on,
+                    "norm_dino_feat": args.diffuse_on == "dino_feat",
                 },
             },
+            "train_num_steps": 150000,
+            "save_and_sample_every": 2500,
         }
     )
 
@@ -163,10 +161,7 @@ def main(args):
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
-    if args.server == "jz":
-        decoder_weigth_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/results_decoder/calvin/decoder_model_48.pth"
-    else:
-        decoder_weigth_path = "/home/grislain/AVDC/calvin/models/decoder_model_48.pth"
+    decoder_weigth_path = args.feature_decoder_checkpoint_path
 
     if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
         import torch
@@ -207,12 +202,12 @@ def main(args):
         train_set=train_set,
         valid_set=valid_set,
         train_lr=1e-4,
-        train_num_steps=150000,
-        save_and_sample_every=2500,
+        train_num_steps=cfg.train_num_steps,
+        save_and_sample_every=cfg.save_and_sample_every,
         ema_update_every=10,
         ema_decay=0.999,
-        train_batch_size=16,
-        valid_batch_size=32,
+        train_batch_size=cfg.datamodule.lang_dataset.batch_size,
+        valid_batch_size=1,
         gradient_accumulate_every=1,
         num_samples=valid_n,
         results_folder=results_folder,
@@ -405,10 +400,29 @@ if __name__ == "__main__":
     parser.add_argument(
         "-g", "--guidance_weight", type=int, default=0
     )  # set to positive to use guidance
-    # parser.add_argument(
-    #     "-d", "--decoder_checkpoint_path", type=str, default=None
-    # )  # set to decoder checkpoint path
+    parser.add_argument(
+        "--diffuse_on", type=str, default="pixel", choices=["pixel", "dino_feat"]
+    )  # set to 'pixel' or 'dino_feat' to diffuse on pixel or dino features
+    parser.add_argument(
+        "--num_subgoals", type=int, default=8
+    )  # set to number of subgoals
+    parser.add_argument(
+        "-r", "--results_folder", type=str, default="../results_huit_ann/calvin"
+    )  # set to results folder
+    parser.add_argument(
+        "--feature_decoder_checkpoint_path",
+        type=str,
+        default="/home/grislain/AVDC/calvin/models/decoder/decoder_model_48.pth",
+    )  # set to decoder checkpoint path
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+    )  # set to data path
     args = parser.parse_args()
+
+    if args.diffuse_on == "diffuse_on":
+        assert args.feature_decoder_checkpoint_path is not None
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None
