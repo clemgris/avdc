@@ -39,12 +39,8 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    results_folder = "../results_policy_single/calvin"
-
-    if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
-    else:
-        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    results_folder = args.results_folder
+    data_path = args.data_path
 
     cfg = DictConfig(
         {
@@ -71,7 +67,7 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "num_subgoals": 1,
+                    "num_subgoals": args.num_subgoals,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -79,6 +75,7 @@ def main(args):
                 },
             },
             "save_every": 100,  # In gradient steps
+            "training_steps": 150000,  # In gradient steps
         }
     )
 
@@ -109,7 +106,7 @@ def main(args):
     print("Train data:", len(train_set))
     print("Valid data:", len(valid_set))
 
-    training_steps = 60000  # TO BE MODIFIED
+    training_steps = cfg.training_steps
     device = torch.device("cuda")
     log_freq = 10
 
@@ -173,7 +170,7 @@ def main(args):
     dataloader = torch.utils.data.DataLoader(
         train_set,
         num_workers=4,
-        batch_size=64,
+        batch_size=cfg.datamodule.lang_dataset.batch_size,
         shuffle=True,
         pin_memory=device != torch.device("cpu"),
         drop_last=True,
@@ -223,6 +220,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c", "--checkpoint_num", type=int, default=None
     )  # set to checkpoint number to resume training or generate samples
-
+    parser.add_argument(
+        "--training_steps", type=int, default=150000
+    )  # set to number of training steps
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+    )  # set to path to dataset
+    parser.add_argument(
+        "-r", "--results_folder", type=str, default="../results_policy_single/calvin"
+    )  # set to path to results folder
+    parser.add_argument(
+        "--num_subgoals", type=int, default=8
+    )  # set to number of subgoals
     args = parser.parse_args()
     main(args)
