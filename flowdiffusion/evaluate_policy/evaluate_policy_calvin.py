@@ -280,6 +280,7 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
         )
         tot_tasks[task] += 1
         print(f"{task}: {results[task]} / {tot_tasks[task]}")
+        breakpoint()
 
     print("\nResults\n" + "-" * 60)
     for task in results:
@@ -329,13 +330,6 @@ if __name__ == "__main__":
     seed_everything(0, workers=True)
     parser = argparse.ArgumentParser(
         description="Evaluate a trained model on multistep sequences with language goals."
-    )
-
-    parser.add_argument(
-        "--eval_log_dir",
-        type=str,
-        help="Where to log the evaluation results.",
-        default=None,
     )
 
     parser.add_argument(
@@ -395,6 +389,13 @@ if __name__ == "__main__":
         help="Print debug info and visualize environment.",
     )
 
+    parser.add_argument(
+        "--num_subgoals",
+        type=int,
+        default=8,
+        help="Number of subgoals to generate.",
+    )
+
     parser.add_argument("--device", default=0, type=int, help="CUDA device")
     args = parser.parse_args()
 
@@ -421,6 +422,7 @@ if __name__ == "__main__":
             "debug": args.debug,
             "debug_path": "/home/grislain/AVDC/debug",
             "server": args.server,
+            "num_subgoals": args.num_subgoals,
         }
     )
 
@@ -428,7 +430,6 @@ if __name__ == "__main__":
         print("Using oracle subgoals")
     else:
         print("Using generated subgoals")
-    breakpoint()
 
     # Do not change
     args.ep_len = 240
@@ -468,7 +469,7 @@ if __name__ == "__main__":
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "num_subgoals": 8,
+                    "num_subgoals": args.num_subgoals,
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -514,7 +515,6 @@ if __name__ == "__main__":
     env = hydra.utils.instantiate(
         rollout_cfg.env_cfg, high_level_dataset, device, show_gui=False
     )
-
     model = CustomModel(config)
 
     evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
