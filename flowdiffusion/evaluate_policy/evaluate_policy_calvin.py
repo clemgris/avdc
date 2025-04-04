@@ -8,6 +8,7 @@ from distutils.util import strtobool
 from pathlib import Path
 
 import hydra
+import numpy as np
 import torch
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
@@ -58,7 +59,7 @@ class CustomModel(CalvinBaseModel):
 
         self.steps = 0
         self.guidance_weight = 3
-        self.sample_action_every = 8
+        self.sample_action_every = int(np.ceil(65 / cfg.num_subgoals)) - 1
 
         self.policy = DiffusionPolicy(
             self.cfg.policy.diff_cfg, dataset_stats=self.stats
@@ -280,7 +281,6 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
         )
         tot_tasks[task] += 1
         print(f"{task}: {results[task]} / {tot_tasks[task]}")
-        breakpoint()
 
     print("\nResults\n" + "-" * 60)
     for task in results:
