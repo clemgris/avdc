@@ -1223,6 +1223,9 @@ class Trainer(object):
                                 )
                             # Decode features into image
                             pred_img = self.feature_decoder(pred_img.to(device))
+                        else:
+                            # Unormalise
+                            pred_img = (pred_img + 1) / 2
 
                         utils.save_image(
                             pred_img,
