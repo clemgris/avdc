@@ -74,7 +74,7 @@ def main(args):
                     "norm_dino_feat": args.diffuse_on == "dino_feat",
                 },
             },
-            "train_num_steps": 150000,
+            "train_num_steps": args.train_num_steps,
             "save_and_sample_every": 2500,
         }
     )
@@ -235,6 +235,23 @@ def main(args):
             exist_ok=True,
         )
 
+        val_annotations = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/annotations/new_playtable_validation.yaml",
+            )
+        )
+
+        text = text.relace(" ", "_")
+        text_ann = val_annotations[text][0]
+
+        # Save text annotation
+        with open(
+            str(results_folder / f"test_imgs / {text.replace(' ', '_')}.txt"), "w"
+        ) as file:
+            file.write(text_ann)
+        print(f"Text annotation: {text_ann}")
+
         guidance_weight = args.guidance_weight
         image = Image.open(args.inference_path).convert("RGB")
         image.save(str(results_folder / "test_imgs / test_img.png"))
@@ -251,7 +268,7 @@ def main(args):
             image = transform(image)
             for i in range(args.num_samples):
                 output = trainer.sample(
-                    image.unsqueeze(0), [text], batch_size, guidance_weight
+                    image.unsqueeze(0), [text_ann], batch_size, guidance_weight
                 ).cpu()
 
                 # Unnormalize
@@ -419,6 +436,9 @@ if __name__ == "__main__":
         type=str,
         default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
     )  # set to data path
+    parser.add_argument(
+        "--train_num_steps", type=int, default=150000
+    )  # set to number of training steps
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":
