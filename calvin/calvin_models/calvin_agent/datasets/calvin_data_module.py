@@ -46,7 +46,7 @@ class CalvinDataModule(pl.LightningDataModule):
         self.modalities: List[str] = []
         self.transforms = transforms
 
-        self.use_shm = "shm_dataset" in self.datasets_cfg.lang_dataset._target_
+        self.use_shm = False  # "shm_dataset" in self.datasets_cfg.lang_dataset._target_
 
     def prepare_data(self, *args, **kwargs):
         # check if files already exist
