@@ -126,7 +126,13 @@ def main(args):
         train_set = valid_set = [None]  # dummy
         valid_n = 0
     else:
-        train_set = data_module.train_datasets["lang"]
+        train_set = (
+            data_module.train_datasets["lang"]
+            + data_module.train_datasets["lang"]
+            + data_module.train_datasets["lang"]
+            + data_module.train_datasets["lang"]
+            + data_module.train_datasets["lang"]
+        )
         valid_set = data_module.val_datasets["lang"]
         valid_n = 1
 
@@ -340,7 +346,7 @@ def main(args):
                     init_feat = (init_feat - dino_stats["mean"]) / (
                         dino_stats["std"] + 1e-6
                     )
-                    init_feat = torch.tanh(init_feat)
+                    # init_feat = torch.tanh(init_feat)
                 elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
                     init_feat = (init_feat - dino_stats["min"]) / (
                         dino_stats["max"] - dino_stats["min"]
@@ -362,7 +368,7 @@ def main(args):
                 if cfg.datamodule.lang_dataset.norm_dino_feat:
                     if cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
                         output = output.clip(-0.999, 0.999)
-                        output = torch.arctanh(output)
+                        # output = torch.arctanh(output)
                         output = output * dino_stats["std"] + dino_stats["mean"]
                     elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
                         output = (output + 1) / 2

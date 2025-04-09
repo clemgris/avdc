@@ -1174,8 +1174,8 @@ class Trainer(object):
                                 if self.norm_feat:
                                     # Unormalise
                                     if self.norm_feat == "z_score":
-                                        gt_img = gt_img.clip(-0.999, 0.999)
-                                        gt_img = torch.arctanh(gt_img)
+                                        # gt_img = gt_img.clip(-0.999, 0.999)
+                                        # gt_img = torch.arctanh(gt_img)
                                         gt_img = (
                                             gt_img * self.features_stats["std"]
                                             + self.features_stats["mean"]
@@ -1224,8 +1224,8 @@ class Trainer(object):
                             if self.norm_feat:
                                 # Unormalise
                                 if self.norm_feat == "z_score":
-                                    pred_img = pred_img.clip(-0.999, 0.999)
-                                    pred_img = torch.arctanh(pred_img)
+                                    # pred_img = pred_img.clip(-0.999, 0.999)
+                                    # pred_img = torch.arctanh(pred_img)
                                     pred_img = (
                                         pred_img * self.features_stats["std"]
                                         + self.features_stats["mean"]
