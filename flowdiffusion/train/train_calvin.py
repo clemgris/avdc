@@ -79,6 +79,8 @@ def main(args):
         }
     )
 
+    print("Config:", cfg)
+
     sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
     if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
