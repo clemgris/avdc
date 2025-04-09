@@ -77,7 +77,7 @@ def main(args):
                 },
             },
             "train_num_steps": args.train_num_steps,
-            "save_and_sample_every": 250,  # 2500, # DEBUG
+            "save_and_sample_every": args.save_and_sample_every,
         }
     )
 
@@ -458,6 +458,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size", type=int, default=16
     )  # set to batch size for training
+    parser.add_argument(
+        "--save_and_sample_every", type=int, default=2500
+    )  # set to number of steps to save and sample
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":
