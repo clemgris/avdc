@@ -126,13 +126,7 @@ def main(args):
         train_set = valid_set = [None]  # dummy
         valid_n = 0
     else:
-        train_set = (
-            data_module.train_datasets["lang"]
-            + data_module.train_datasets["lang"]
-            + data_module.train_datasets["lang"]
-            + data_module.train_datasets["lang"]
-            + data_module.train_datasets["lang"]
-        )
+        train_set = data_module.train_datasets["lang"]
         valid_set = data_module.val_datasets["lang"]
         valid_n = 1
 
