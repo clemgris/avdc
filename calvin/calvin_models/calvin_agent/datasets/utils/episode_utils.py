@@ -101,20 +101,32 @@ def process_features(
     episode: Dict[str, np.ndarray],
     with_dino_feat: bool,
     dino_stats_path: str,
-    norm_dino_feat: bool,
+    norm_dino_feat: str | None,
 ) -> Dict[str, Dict[str, torch.Tensor]]:
     seq_dino_feat = {"dino_features": torch.empty(0)}
     if with_dino_feat:
         seq_dino_feat_ = torch.tensor(np.array(episode["dino_features"]))
-        if norm_dino_feat:
+        if norm_dino_feat is not None:
             if os.path.exists(dino_stats_path):
                 dino_stats = torch.load(dino_stats_path)["dino_features"]
-                # MinMax normalization
-                seq_dino_feat_ = (seq_dino_feat_ - dino_stats["min"]) / (
-                    dino_stats["max"] - dino_stats["min"]
-                )
-                # In [-1, 1]
-                seq_dino_feat_ = seq_dino_feat_ * 2 - 1
+                if norm_dino_feat == "z_score":
+                    # Z-score normalization
+                    seq_dino_feat_ = (seq_dino_feat_ - dino_stats["mean"]) / (
+                        dino_stats["std"] + 1e-6
+                    )
+                    # apply tanh to project to [-1, 1]
+                    seq_dino_feat_ = torch.tanh(seq_dino_feat_)
+                elif norm_dino_feat == "min_max":
+                    # MinMax normalization
+                    seq_dino_feat_ = (seq_dino_feat_ - dino_stats["min"]) / (
+                        dino_stats["max"] - dino_stats["min"]
+                    )
+                    # In [-1, 1]
+                    seq_dino_feat_ = seq_dino_feat_ * 2 - 1
+                else:
+                    raise ValueError(
+                        f"Normalization method {norm_dino_feat} not supported"
+                    )
             else:
                 raise FileNotFoundError(
                     f"Path to dino features statistics {dino_stats_path} not found"

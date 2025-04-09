@@ -49,7 +49,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
-                    "batch_size": 16,
+                    "batch_size": args.batch_size,
                     "min_window_size": 16,
                     "max_window_size": 65,
                     "proprio_state": {
@@ -71,15 +71,17 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": args.diffuse_on,
-                    "norm_dino_feat": args.diffuse_on == "dino_feat",
+                    "norm_dino_feat": "z_score"
+                    if args.diffuse_on == "dino_feat"
+                    else None,  # 'z_score' or 'min_max' or None
                 },
             },
             "train_num_steps": args.train_num_steps,
-            "save_and_sample_every": 2500,
+            "save_and_sample_every": 250,  # 2500, # DEBUG
         }
     )
 
-    print("Config:", cfg)
+    print("Config:\n" + OmegaConf.to_yaml(cfg))
 
     sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
@@ -334,10 +336,16 @@ def main(args):
 
             if cfg.datamodule.lang_dataset.norm_dino_feat:
                 # Normalise init_feat
-                init_feat = (init_feat - dino_stats["min"]) / (
-                    dino_stats["max"] - dino_stats["min"]
-                )
-                init_feat = init_feat * 2 - 1
+                if cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                    init_feat = (init_feat - dino_stats["mean"]) / (
+                        dino_stats["std"] + 1e-6
+                    )
+                    init_feat = torch.tanh(init_feat)
+                elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
+                    init_feat = (init_feat - dino_stats["min"]) / (
+                        dino_stats["max"] - dino_stats["min"]
+                    )
+                    init_feat = init_feat * 2 - 1
             init_feat = rearrange(init_feat, "b (h w) c -> b c h w ", w=16, h=16)
             for i in range(args.num_samples):
                 output = trainer.sample(
@@ -350,13 +358,18 @@ def main(args):
                     h=16,
                     n=(sample_per_seq - 1),
                 )
+                # Unnormalize
                 if cfg.datamodule.lang_dataset.norm_dino_feat:
-                    # Unnormalize
-                    output = (output + 1) / 2
-                    output = (
-                        output * (dino_stats["max"] - dino_stats["min"])
-                        + dino_stats["min"]
-                    )
+                    if cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                        output = output.clip(-0.999, 0.999)
+                        output = torch.arctanh(output)
+                        output = output * dino_stats["std"] + dino_stats["mean"]
+                    elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
+                        output = (output + 1) / 2
+                        output = (
+                            output * (dino_stats["max"] - dino_stats["min"])
+                            + dino_stats["min"]
+                        )
 
                 output = trainer.feature_decoder(output.to(device)).detach().cpu()
 
@@ -442,6 +455,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train_num_steps", type=int, default=150000
     )  # set to number of training steps
+    parser.add_argument(
+        "--batch_size", type=int, default=16
+    )  # set to batch size for training
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":

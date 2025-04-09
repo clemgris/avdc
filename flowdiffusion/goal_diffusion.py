@@ -866,7 +866,7 @@ class Trainer(object):
         inception_block_idx=2048,
         cond_drop_chance=0.1,
         dino_stats_path=None,
-        norm_feat=True,
+        norm_feat=None,
     ):
         super().__init__()
 
@@ -909,7 +909,7 @@ class Trainer(object):
         else:
             self.feature_decoder = None
             self.features_stats = None
-            self.norm_feat = False
+            self.norm_feat = None
 
         # InceptionV3 for fid-score computation
 
@@ -1173,15 +1173,23 @@ class Trainer(object):
 
                                 if self.norm_feat:
                                     # Unormalise
-                                    gt_img = (gt_img + 1) / 2
-                                    gt_img = (
-                                        gt_img
-                                        * (
-                                            self.features_stats["max"]
-                                            - self.features_stats["min"]
+                                    if self.norm_feat == "z_score":
+                                        gt_img = gt_img.clip(-0.999, 0.999)
+                                        gt_img = torch.arctanh(gt_img)
+                                        gt_img = (
+                                            gt_img * self.features_stats["std"]
+                                            + self.features_stats["mean"]
                                         )
-                                        + self.features_stats["min"]
-                                    )
+                                    if self.norm_feat == "min_max":
+                                        gt_img = (gt_img + 1) / 2
+                                        gt_img = (
+                                            gt_img
+                                            * (
+                                                self.features_stats["max"]
+                                                - self.features_stats["min"]
+                                            )
+                                            + self.features_stats["min"]
+                                        )
                                 # Decode features into image
                                 gt_img = self.feature_decoder(gt_img.to(device))
                             else:
@@ -1215,15 +1223,23 @@ class Trainer(object):
 
                             if self.norm_feat:
                                 # Unormalise
-                                pred_img = (pred_img + 1) / 2
-                                pred_img = (
-                                    pred_img
-                                    * (
-                                        self.features_stats["max"]
-                                        - self.features_stats["min"]
+                                if self.norm_feat == "z_score":
+                                    pred_img = pred_img.clip(-0.999, 0.999)
+                                    pred_img = torch.arctanh(pred_img)
+                                    pred_img = (
+                                        pred_img * self.features_stats["std"]
+                                        + self.features_stats["mean"]
                                     )
-                                    + self.features_stats["min"]
-                                )
+                                elif self.norm_feat == "min_max":
+                                    pred_img = (pred_img + 1) / 2
+                                    pred_img = (
+                                        pred_img
+                                        * (
+                                            self.features_stats["max"]
+                                            - self.features_stats["min"]
+                                        )
+                                        + self.features_stats["min"]
+                                    )
                             # Decode features into image
                             pred_img = self.feature_decoder(pred_img.to(device))
                         else:
