@@ -49,7 +49,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
-                    "batch_size": 4,  # 8,
+                    "batch_size": 16,
                     "min_window_size": 16,
                     "max_window_size": 65,
                     "proprio_state": {
