@@ -113,11 +113,13 @@ def process_features(
                     # Z-score normalization
                     per_patch_mean = dino_stats["mean"]
                     per_patch_std = dino_stats["std"]
-                    seq_dino_feat_ = (seq_dino_feat_ - per_patch_mean) / (
-                        per_patch_std + 1e-6
+                    sample_mean = seq_dino_feat_.mean(dim=0)
+                    sample_std = seq_dino_feat_.std(dim=0)
+                    seq_dino_feat_ = (seq_dino_feat_ - sample_mean) / (
+                        sample_std + 1e-6
                     )
                     # apply tanh to project to [-1, 1]
-                    # seq_dino_feat_ = torch.tanh(seq_dino_feat_)
+                    # seq_dino_feat_ = torch.tanh(seq_dino_feat_/3)
                 elif norm_dino_feat == "min_max":
                     # MinMax normalization
                     seq_dino_feat_ = (seq_dino_feat_ - dino_stats["min"]) / (
