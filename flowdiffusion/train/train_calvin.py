@@ -49,7 +49,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
-                    "batch_size": 8,
+                    "batch_size": 4,  # 8,
                     "min_window_size": 16,
                     "max_window_size": 65,
                     "proprio_state": {
@@ -113,6 +113,7 @@ def main(args):
                     f"Results folder {results_folder} already exists. Use --override to overwrite."
                 )
         results_folder.mkdir(exist_ok=True, parents=True)
+        print("Results folder:", results_folder)
 
     with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
         file.write(OmegaConf.to_yaml(cfg))
