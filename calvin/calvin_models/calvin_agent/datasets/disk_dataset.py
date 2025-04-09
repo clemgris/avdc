@@ -1,6 +1,7 @@
 import logging
 import os
 import pickle
+import random
 import re
 from itertools import chain
 from pathlib import Path
@@ -18,6 +19,7 @@ from calvin_agent.datasets.utils.episode_utils import (
     process_rgb,
     process_state,
 )
+from torchvision.transforms import functional as F
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +334,48 @@ class DiskImageDataset(BaseDataset):
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
 
+class RandomApplyTransform:
+    def __init__(self, transform_fn, p=0.5):
+        self.transform_fn = transform_fn
+        self.p = p
+
+    def __call__(self, img):
+        if random.random() < self.p:
+            return self.transform_fn(img)
+        return img
+
+
+class ComposeTensor:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, x):
+        unorm_x = (x + 1) / 2
+        for t in self.transforms:
+            x = t(unorm_x)
+        norm_x = (x - 0.5) * 2
+        return norm_x
+
+
+def get_stochastic_augmentation(p=0.5):
+    return ComposeTensor(
+        [
+            RandomApplyTransform(
+                lambda x: F.adjust_brightness(x, random.uniform(0.8, 1.2)), p=p
+            ),
+            RandomApplyTransform(
+                lambda x: F.adjust_contrast(x, random.uniform(0.8, 1.2)), p=p
+            ),
+            RandomApplyTransform(
+                lambda x: F.adjust_saturation(x, random.uniform(0.8, 1.2)), p=p
+            ),
+            RandomApplyTransform(
+                lambda x: F.adjust_hue(x, random.uniform(-0.1, 0.1)), p=p
+            ),
+        ]
+    )
+
+
 class DiskActionDataset(BaseDataset):
     """
     Dataset that loads episodes as individual files from disk.
@@ -346,6 +390,7 @@ class DiskActionDataset(BaseDataset):
         self,
         *args: Any,
         num_subgoals: int = 1,
+        prob_aug: float = 0.5,
         save_format: str = "npz",
         pretrain: bool = False,
         **kwargs: Any,
@@ -360,19 +405,18 @@ class DiskActionDataset(BaseDataset):
             raise NotImplementedError
         self.pretrain = pretrain
         self.num_subgoals = num_subgoals
-
         if self.with_lang:
             self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
                 self._build_file_indices_lang(self.abs_datasets_dir)
             )
-            print(len(self.episode_lookup))
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
-        self.with_lang = False
 
         self.naming_pattern, self.n_digits = lookup_naming_pattern(
             self.abs_datasets_dir, self.save_format
         )
+
+        self.prob_data_aug = prob_aug
 
     def _get_episode_name(self, file_idx: int) -> Path:
         return Path(
@@ -397,7 +441,10 @@ class DiskActionDataset(BaseDataset):
         start_idx, end_idx, j = self.episode_lookup[idx]
 
         num_frames = end_idx - start_idx + 1
-        chunk_size = int(np.ceil(num_frames / self.num_subgoals))
+        chunk_size = random.randint(
+            int(np.ceil(self.min_window_size / self.num_subgoals)),
+            int(np.ceil(num_frames / self.num_subgoals)),
+        )
 
         keys = list(chain(*self.observation_space.values()))
         keys.remove("language")
@@ -473,11 +520,49 @@ class DiskActionDataset(BaseDataset):
             assert end_idx >= self.max_window_size
             lang_lookup.append(i)
             num_frames = end_idx - start_idx + 1
-            chunk_size = num_frames // self.num_subgoals + 1
-            for j in range(0, max(1, end_idx - start_idx + 1 - chunk_size)):
+            chunk_size = int(np.ceil(num_frames / self.num_subgoals))
+            for j in range(0, max(1, num_frames - chunk_size)):
                 episode_lookup.append((start_idx, end_idx, j))
 
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
+
+    def _build_file_indices(self, abs_datasets_dir: Path) -> np.ndarray:
+        """
+        This method builds the mapping from index to file_name used for loading the episodes of the non language
+        dataset.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        episode_lookup = []
+
+        ep_start_end_ids = np.load(abs_datasets_dir / "ep_start_end_ids.npy")
+        logger.info(
+            f'Found "ep_start_end_ids.npy" with {len(ep_start_end_ids)} episodes.'
+        )
+        for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
+            assert end_idx >= self.max_window_size
+            num_frames = end_idx - start_idx + 1
+            chunk_size = int(np.ceil(self.max_window_size / self.num_subgoals))
+            for j in range(0, max(1, num_frames - chunk_size)):
+                episode_lookup.append(
+                    (
+                        start_idx
+                        + (j // (self.max_window_size - chunk_size + 1))
+                        * (self.max_window_size - chunk_size + 1),
+                        start_idx
+                        + (j // (self.max_window_size - chunk_size + 1))
+                        * (self.max_window_size - chunk_size + 1)
+                        + self.max_window_size,
+                        j % (self.max_window_size - chunk_size + 1),
+                    )
+                )
+        return np.array(episode_lookup)
 
     def _pad_sequence(self, seq: Dict, pad_size: int) -> Dict:
         """
@@ -611,7 +696,11 @@ class DiskActionDataset(BaseDataset):
 
         start_image = sequence["rgb_obs"]["rgb_static"][0]
         actions = np.array(sequence["actions"][:-1], dtype=np.float32)
-        end_image = sequence["rgb_obs"]["rgb_static"][-1]
+        end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
+            sequence["rgb_obs"]["rgb_static"][-1]
+        )
+
+        print(sequence["rgb_obs"]["rgb_static"].shape)
         # Stack start and end images
         start_end_images = np.stack([start_image, end_image], dtype=np.float32)
         state = np.zeros((2, 0), dtype=np.float32)
@@ -1118,3 +1207,4 @@ class DiskDiffusionOracleDataset(BaseDataset):
         )
         padded = torch.vstack((input_tensor, zeros_repeated))
         return padded
+                                                                                                                
