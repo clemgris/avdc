@@ -153,7 +153,11 @@ def main(args):
         #     if idx > 10: break
         # breakpoint()
 
-    unet = Unet(channel, channel_mult=(1, 2, 3))
+    if args.diffuse_on == "pixel":
+        channel_mult = (1, 2, 3, 4, 5)
+    elif args.diffuse_on == "dino_feat":
+        channel_mult = (1, 2, 3)
+    unet = Unet(channel, channel_mult=channel_mult)
 
     if args.server == "jz":
         text_pretrained_model = (
@@ -224,8 +228,8 @@ def main(args):
         norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
     )
 
-    if args.args.checkpoint_num is not None:
-        print("Loading checkpoint", args.checkpoint_num)
+    if args.checkpoint_num is not None:
+        print("Continuing training from checkpoint", args.checkpoint_num)
         trainer.load(args.checkpoint_num)
 
     if args.checkpoint_num is not None:
