@@ -827,7 +827,6 @@ class GoalGaussianDiffusion(nn.Module):
             f"height and width of image must be {img_size}, got({h}, {w})"
         )
         t = torch.randint(0, self.num_timesteps, (b,), device=device).long()
-
         img = self.normalize(img)
         return self.p_losses(img, t, img_cond, task_embed)
 
@@ -1173,7 +1172,9 @@ class Trainer(object):
 
                                 if self.norm_feat:
                                     # Unormalise
-                                    if self.norm_feat == "z_score":
+                                    if self.norm_feat == "l2":
+                                        pass
+                                    elif self.norm_feat == "z_score":
                                         # gt_img = gt_img.clip(-0.999, 0.999)
                                         # gt_img = torch.arctanh(gt_img)
                                         gt_img = (
@@ -1223,7 +1224,9 @@ class Trainer(object):
 
                             if self.norm_feat:
                                 # Unormalise
-                                if self.norm_feat == "z_score":
+                                if self.norm_feat == "l2":
+                                    pass
+                                elif self.norm_feat == "z_score":
                                     # pred_img = pred_img.clip(-0.999, 0.999)
                                     # pred_img = torch.arctanh(pred_img)
                                     pred_img = (
