@@ -9,6 +9,7 @@ from pathlib import Path
 
 import hydra
 import numpy as np
+import PIL.Image as Image
 import torch
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
@@ -288,6 +289,38 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
 
     print(f"SR: {sum(results.values()) / sum(tot_tasks.values()) * 100:.1f}%")
 
+    # Save results
+    with open(os.path.join(args.eval_folder, f"results_{args.test_on}.txt"), "w") as f:
+        for task in results:
+            f.write(f"{task}: {results[task]} / {tot_tasks[task]}\n")
+        f.write(f"SR: {sum(results.values()) / sum(tot_tasks.values()) * 100:.1f}%\n")
+
+
+def save_gif(obs_list, save_path, duration=0.2):
+    frames = []
+
+    for img in obs_list:
+        # Convert from CHW torch tensor to HWC numpy array
+        img_np = img.detach().cpu().permute(1, 2, 0).numpy()
+
+        # Normalize from [-1, 1] to [0, 255]
+        img_np = ((img_np + 1) / 2 * 255).clip(0, 255).astype(np.uint8)
+
+        # Convert to PIL Image in RGB mode
+        frames.append(Image.fromarray(img_np).convert("RGB"))
+
+    # Save GIF with optimized settings
+    frames[0].save(
+        save_path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=int(duration * 100),  # duration in milliseconds
+        loop=0,
+        optimize=True,
+        quality=95,
+        disposal=2,  # Replace previous frame
+    )
+
 
 def rollout(
     env,
@@ -310,11 +343,13 @@ def rollout(
 
     model.reset()
     start_info = env.get_info()
-
+    obs_list = []
     for step in range(args.ep_len):
         # action = episode["actions"][step]
         action = model.step(obs, lang_annotation, episode)
         obs, _, _, current_info = env.step(action)
+        if args.save_failures:
+            obs_list.append(obs["rgb_obs"]["rgb_static"][0, 0])
         # Check if current step solves a task
         current_task_info = task_oracle.get_task_info_for_set(
             start_info, current_info, {task.replace(" ", "_")}
@@ -323,6 +358,36 @@ def rollout(
             print(colored("S", "green"), end=" ")
             return True
     print(colored("F", "red"), end=" ")
+    if args.save_failures:
+        # Create folder for this failed episode
+        os.makedirs(args.debug_path, exist_ok=True)
+        failed_episode_path = os.path.join(
+            args.debug_path, f"failed_{task.replace(' ', '_')}_{episode['idx']}"
+        )
+        os.makedirs(
+            failed_episode_path,
+            exist_ok=True,
+        )
+        # Save episode (as png)
+        torchvision.utils.save_image(
+            (torch.stack(obs_list) + 1) / 2,
+            os.path.join(
+                failed_episode_path,
+                "trajectory.png",
+            ),
+        )
+        # Save episode (as gif)
+        save_gif(
+            obs_list, os.path.join(failed_episode_path, "trajectory.gif"), duration=1.0
+        )
+        # Save subgoals
+        torchvision.utils.save_image(
+            (model.sub_goals[0] + 1) / 2,
+            os.path.join(
+                failed_episode_path,
+                "subgoals.png",
+            ),
+        )
     return False
 
 
@@ -396,6 +461,26 @@ if __name__ == "__main__":
         help="Number of subgoals to generate.",
     )
 
+    parser.add_argument(
+        "--save_failures",
+        action="store_true",
+        help="Save failed episodes.",
+    )
+
+    parser.add_argument(
+        "--debug_path",
+        type=str,
+        default="/home/grislain/AVDC/debug",
+        help="Path to save debug images.",
+    )
+
+    parser.add_argument(
+        "--eval_folder",
+        type=str,
+        default="eval",
+        help="Folder to save evaluation results.",
+    )
+
     parser.add_argument("--device", default=0, type=int, help="CUDA device")
     args = parser.parse_args()
 
@@ -420,11 +505,19 @@ if __name__ == "__main__":
                 **high_level_data_config,
             },
             "debug": args.debug,
-            "debug_path": "/home/grislain/AVDC/debug",
+            "debug_path": args.debug_path,
             "server": args.server,
             "num_subgoals": args.num_subgoals,
         }
     )
+
+    # Save config
+    os.makedirs(args.eval_folder, exist_ok=True)
+    with open(
+        os.path.join(args.eval_folder, "config.yaml"),
+        "w",
+    ) as f:
+        OmegaConf.save(config, f)
 
     if args.use_oracle_subgoals:
         print("Using oracle subgoals")
