@@ -38,7 +38,7 @@ class UnetBridge(nn.Module):
 
 
 class UnetMW(nn.Module):
-    def __init__(self, in_channels: int):
+    def __init__(self, in_channels: int, channel_mult: tuple = (1, 2, 3, 4, 5)):
         super(UnetMW, self).__init__()
         self.in_channels = in_channels
         self.unet = UNetModel(
@@ -49,7 +49,7 @@ class UnetMW(nn.Module):
             num_res_blocks=2,
             attention_resolutions=(8, 16),
             dropout=0,
-            channel_mult=(1, 2, 3, 4, 5),
+            channel_mult=channel_mult,
             conv_resample=True,
             dims=3,
             num_classes=None,

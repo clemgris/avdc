@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from einops import rearrange
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -71,9 +72,9 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": args.diffuse_on,
-                    "norm_dino_feat": "z_score"
+                    "norm_dino_feat": "l2"
                     if args.diffuse_on == "dino_feat"
-                    else None,  # 'z_score' or 'min_max' or None
+                    else None,  # 'z_score' or 'min_max' or 'l2' or None
                 },
             },
             "train_num_steps": args.train_num_steps,
@@ -152,7 +153,7 @@ def main(args):
         #     if idx > 10: break
         # breakpoint()
 
-    unet = Unet(channel)
+    unet = Unet(channel, channel_mult=(1, 2, 3))
 
     if args.server == "jz":
         text_pretrained_model = (
@@ -193,7 +194,7 @@ def main(args):
         timesteps=100,
         sampling_timesteps=args.sample_steps,
         loss_type="l2",
-        objective="pred_v",
+        objective="pred_x0",  # "pred_v",
         beta_schedule="cosine",
         min_snr_loss_weight=True,
         auto_normalize=False,
@@ -336,7 +337,9 @@ def main(args):
 
             if cfg.datamodule.lang_dataset.norm_dino_feat:
                 # Normalise init_feat
-                if cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                if cfg.datamodule.lang_dataset.norm_dino_feat == "l2":
+                    init_feat = F.normalize(init_feat, dim=-1)
+                elif cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
                     init_feat = (init_feat - dino_stats["mean"]) / (
                         dino_stats["std"] + 1e-6
                     )
@@ -360,8 +363,10 @@ def main(args):
                 )
                 # Unnormalize
                 if cfg.datamodule.lang_dataset.norm_dino_feat:
-                    if cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
-                        output = output.clip(-0.999, 0.999)
+                    if cfg.datamodule.lang_dataset.norm_dino_feat == "l2":
+                        output = F.normalize(output, dim=-1)
+                    elif cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                        # output = output.clip(-0.999, 0.999)
                         # output = torch.arctanh(output)
                         output = output * dino_stats["std"] + dino_stats["mean"]
                     elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
