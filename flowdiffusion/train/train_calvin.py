@@ -224,6 +224,10 @@ def main(args):
         norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
     )
 
+    if args.args.checkpoint_num is not None:
+        print("Loading checkpoint", args.checkpoint_num)
+        trainer.load(args.checkpoint_num)
+
     if args.checkpoint_num is not None:
         trainer.load(args.checkpoint_num)
 
@@ -466,6 +470,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save_and_sample_every", type=int, default=2500
     )  # set to number of steps to save and sample
+    parser.add_argument(
+        "--args.checkpoint_num", type=int, default=None
+    )  # set to checkpoint number to resume training or generate samples
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":
