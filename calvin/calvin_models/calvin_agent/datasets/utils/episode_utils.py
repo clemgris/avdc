@@ -6,6 +6,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from omegaconf import DictConfig, ListConfig, OmegaConf
 
 logger = logging.getLogger(__name__)
@@ -109,14 +110,22 @@ def process_features(
         if norm_dino_feat is not None:
             if os.path.exists(dino_stats_path):
                 dino_stats = torch.load(dino_stats_path)["dino_features"]
-                if norm_dino_feat == "z_score":
+                if norm_dino_feat == "l2":
+                    seq_dino_feat_ = F.normalize(seq_dino_feat_, p=2, dim=-1)
+                elif norm_dino_feat == "z_score":
                     # Z-score normalization
-                    per_patch_mean = dino_stats["mean"]
-                    per_patch_std = dino_stats["std"]
-                    sample_mean = seq_dino_feat_.mean(dim=0)
-                    sample_std = seq_dino_feat_.std(dim=0)
-                    seq_dino_feat_ = (seq_dino_feat_ - sample_mean) / (
-                        sample_std + 1e-6
+                    # features_mean = dino_stats["mean"].mean(dim=-1, keepdim=True)
+                    # features_std = dino_stats["std"].mean(dim=-1, keepdim=True)
+                    # seq_dino_feat_ = (seq_dino_feat_ - features_mean) / (
+                    #     features_std + 1e-6
+                    # )
+                    # sample_mean = seq_dino_feat_.mean(dim=(1, 2))[:, None, None, :]
+                    # sample_std = seq_dino_feat_.std(dim=(1, 2))[:, None, None, :]
+                    # seq_dino_feat_ = (seq_dino_feat_ - sample_mean) / (
+                    #     sample_std + 1e-6
+                    # )
+                    seq_dino_feat_ = (seq_dino_feat_ - dino_stats["mean"]) / (
+                        dino_stats["std"] + 1e-6
                     )
                     # apply tanh to project to [-1, 1]
                     # seq_dino_feat_ = torch.tanh(seq_dino_feat_/3)

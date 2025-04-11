@@ -284,7 +284,7 @@ class DiskImageDataset(BaseDataset):
 
         image = sample["rgb_obs"]["rgb_static"].squeeze(0)
         features = sample["dino_features"].squeeze(0)
-        return image, features
+        return frame_idx, image, features
 
     def _build_file_indices_lang(
         self, abs_datasets_dir: Path
@@ -1207,4 +1207,3 @@ class DiskDiffusionOracleDataset(BaseDataset):
         )
         padded = torch.vstack((input_tensor, zeros_repeated))
         return padded
-                                                                                                                

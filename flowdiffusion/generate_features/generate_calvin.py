@@ -36,7 +36,7 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 def main(args):
     cfg = DictConfig(
         {
-            "root": "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D", #/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+            "root": args.root,
             "datamodule": {
                 "lang_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
@@ -59,7 +59,6 @@ def main(args):
                         "actions": ["actions"],
                         "language": ["language"],
                     },
-                    "skip_frames": 1,
                     "pad": False,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
@@ -71,7 +70,7 @@ def main(args):
     transforms = OmegaConf.load(
         os.path.join(
             root_path,
-            "calvin/calvin_models/conf/datamodule/transforms/play_decoder.yaml",
+            "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
         )
     )
 
@@ -112,10 +111,18 @@ def main(args):
     )
 
     # Frozen encoder model
+
     if args.features == "dino":
-        encoder_model = DinoV2Encoder(
-            name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base", #"facebook/dinov2-base",
-        )
+        if args.server =='hacienda':
+            encoder_model = DinoV2Encoder(
+                name="facebook/dinov2-base",
+            )
+        elif args.server == 'jz':
+            encoder_model = DinoV2Encoder(
+                name="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset/facebook/dinov2-base",
+            )
+        else:
+            raise ValueError(f"Unknown server {args.server}")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
@@ -123,7 +130,7 @@ def main(args):
         train_loader, desc=f"Generate {args.features} features of training data"
     ):
         all_emb = {}
-        frame_idx, image = data
+        frame_idx, image, _ = data
         cls_emb, patch_emb = encoder_model(image)
 
         all_emb["cls_emb"] = np.array(cls_emb.cpu())
@@ -137,11 +144,13 @@ def main(args):
             **all_emb,
         )
 
+    print("Training features saved in ", cfg.root + "/training/features")
+
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
     ):
         eval_emb = {}
-        frame_idx, image = data
+        frame_idx, image, _ = data
         cls_emb, patch_emb = encoder_model(image)
         eval_emb["cls_emb"] = np.array(cls_emb.cpu())
         eval_emb["patch_emb"] = np.array(patch_emb.cpu())
@@ -154,12 +163,20 @@ def main(args):
             **eval_emb,
         )
 
+    print("Validation features saved in ", cfg.root + "/validation/features")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder
+    parser.add_argument(
+        "-r", "--root", type=str, default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    )
+    parser.add_argument(
+        "-s", "--server", type=str, default="hacienda"
+    )  # hacienda or jz
     parser.add_argument("-f", "--features", type=str, default="dino")
     args = parser.parse_args()
     main(args)
