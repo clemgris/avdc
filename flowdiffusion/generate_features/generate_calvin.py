@@ -113,13 +113,13 @@ def main(args):
     # Frozen encoder model
 
     if args.features == "dino":
-        if args.server =='hacienda':
+        if args.server == "hacienda":
             encoder_model = DinoV2Encoder(
                 name="facebook/dinov2-base",
             )
-        elif args.server == 'jz':
+        elif args.server == "jz":
             encoder_model = DinoV2Encoder(
-                name="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset/facebook/dinov2-base",
+                name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base",
             )
         else:
             raise ValueError(f"Unknown server {args.server}")
@@ -172,7 +172,10 @@ if __name__ == "__main__":
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder
     parser.add_argument(
-        "-r", "--root", type=str, default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+        "-r",
+        "--root",
+        type=str,
+        default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
     )
     parser.add_argument(
         "-s", "--server", type=str, default="hacienda"
