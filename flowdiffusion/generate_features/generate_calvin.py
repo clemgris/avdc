@@ -119,7 +119,7 @@ def main(args):
             )
         elif args.server == "jz":
             encoder_model = DinoV2Encoder(
-                name="/lustre/fsmisc/dataset/HuggingFace_Models/facebook/dinov2-base",
+                name="/lustre/fsn1/projects/rech/fch/uxv44vw/facebook/dinov2-base",
             )
         else:
             raise ValueError(f"Unknown server {args.server}")
