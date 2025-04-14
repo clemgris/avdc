@@ -94,7 +94,7 @@ def main(args):
     # Create dataloaders
     train_loader = torch.utils.data.DataLoader(
         train_set,
-        batch_size=1,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -103,7 +103,7 @@ def main(args):
 
     valid_loader = torch.utils.data.DataLoader(
         valid_set,
-        batch_size=1,
+        batch_size=args.batch_size,
         shuffle=False,
         num_workers=4,
         pin_memory=True,
@@ -126,42 +126,70 @@ def main(args):
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
+    # Init stats
+    sum = torch.zeros((256, 768))
+    sum_squared = torch.zeros((256, 768))
+    min = torch.ones((256, 768)) * 1e10
+    max = torch.ones((256, 768)) * -1e10
+
     for data in tqdm(
         train_loader, desc=f"Generate {args.features} features of training data"
     ):
-        all_emb = {}
         frame_idx, image, _ = data
         cls_emb, patch_emb = encoder_model(image)
 
-        all_emb["cls_emb"] = np.array(cls_emb.cpu())
-        all_emb["patch_emb"] = np.array(patch_emb.cpu())
-        all_emb["frame_idx"] = frame_idx.cpu().item()
+        for i in range(len(frame_idx)):
+            all_emb = {}
+            all_emb["cls_emb"] = np.array(cls_emb[i].cpu())
+            all_emb["patch_emb"] = np.array(patch_emb[i].cpu())
+            all_emb["frame_idx"] = frame_idx[i].cpu().item()
 
-        # Save as npz
-        np.savez(
-            Path(cfg.root)
-            / f"training/features/{args.features}_features_{all_emb['frame_idx']}.npz",
-            **all_emb,
-        )
+            # Save as npz
+            np.savez(
+                Path(cfg.root)
+                / f"training/features/{args.features}_features_{all_emb['frame_idx']}.npz",
+                **all_emb,
+            )
+
+            # Update stats
+            min = torch.min(min, patch_emb[i])
+            max = torch.max(max, patch_emb[i])
+            sum += patch_emb[i]
+            sum_squared += patch_emb[i] ** 2
 
     print("Training features saved in ", cfg.root + "/training/features")
+
+    # Save stats
+    num_data = len(train_loader)
+    stats = {"dino_features": {}}
+    stats["dino_features"]["mean"] = sum / num_data
+    stats["dino_features"]["std"] = torch.sqrt(
+        sum_squared / num_data - stats["dino_features"]["mean"] ** 2
+    )
+    stats["dino_features"]["min"] = min
+    stats["dino_features"]["max"] = max
+
+    # Save in root directory with pickle
+    torch.save(stats, os.path.join(cfg.root, "dino_stats.pt"))
+    print("Stats saved in", os.path.join(cfg.root, "dino_stats.pt"))
 
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
     ):
-        eval_emb = {}
         frame_idx, image, _ = data
         cls_emb, patch_emb = encoder_model(image)
-        eval_emb["cls_emb"] = np.array(cls_emb.cpu())
-        eval_emb["patch_emb"] = np.array(patch_emb.cpu())
-        eval_emb["frame_idx"] = frame_idx.cpu().item()
+        for i in range(len(frame_idx)):
+            eval_emb = {}
+            eval_emb["cls_emb"] = np.array(cls_emb[i].cpu())
+            eval_emb["patch_emb"] = np.array(patch_emb[i].cpu())
+            eval_emb["frame_idx"] = frame_idx[i].cpu().item()
 
-        # save as npz
-        np.savez(
-            Path(cfg.root)
-            / f"validation/features/{args.features}_features_{eval_emb['frame_idx']}.npz",
-            **eval_emb,
-        )
+            # save as npz
+            np.savez(
+                Path(cfg.root)
+                / f"validation/features/{args.features}_features_{eval_emb['frame_idx']}.npz",
+                **eval_emb,
+            )
 
     print("Validation features saved in ", cfg.root + "/validation/features")
 
@@ -180,6 +208,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "-s", "--server", type=str, default="hacienda"
     )  # hacienda or jz
+    parser.add_argument(
+        "-b", "--batch_size", type=int, default=32
+    )  # batch size for dataloader
     parser.add_argument("-f", "--features", type=str, default="dino")
     args = parser.parse_args()
     main(args)
