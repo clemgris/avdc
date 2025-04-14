@@ -256,7 +256,7 @@ def main(args):
             )
         )
 
-        text = text.relace(" ", "_")
+        text = text.replace(" ", "_")
         text_ann = val_annotations[text][0]
 
         # Save text annotation
