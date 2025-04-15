@@ -42,16 +42,24 @@ def main(args):
     results_folder = args.results_folder
     data_path = args.data_path
 
+    if args.train_on == "lang":
+        dataset_name = "lang_dataset"
+    elif args.train_on == "vis":
+        dataset_name = "vis_dataset"
+    else:
+        raise ValueError(f"Unknown dataset name {args.train_on}")
+    print(f"Training on {dataset_name} dataset")
+
     cfg = DictConfig(
         {
             "root": data_path,
             "datamodule": {
-                "lang_dataset": {
+                dataset_name: {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskActionDataset",
-                    "key": "lang",
+                    "key": "vis",
                     "save_format": "npz",
                     "batch_size": 32,
-                    "min_window_size": 16,
+                    "min_window_size": 32,
                     "max_window_size": 65,
                     "proprio_state": {
                         "n_state_obs": 8,
@@ -72,10 +80,11 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": "pixel",
+                    "prob_aug": 0.2,
                 },
             },
-            "save_every": 100,  # In gradient steps
             "training_steps": 150000,  # In gradient steps
+            "save_every": 100,  # In gradient steps
         }
     )
 
@@ -85,7 +94,6 @@ def main(args):
             "calvin/calvin_models/conf/datamodule/transforms/play_basic.yaml",
         )
     )
-
     data_module = CalvinDataModule(
         cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
     )
@@ -100,8 +108,8 @@ def main(args):
             )
     results_folder.mkdir(exist_ok=True, parents=True)
 
-    train_set = data_module.train_datasets["lang"]
-    valid_set = data_module.val_datasets["lang"]
+    train_set = data_module.train_datasets["vis"]
+    valid_set = data_module.val_datasets["vis"]
 
     print("Train data:", len(train_set))
     print("Valid data:", len(valid_set))
@@ -115,8 +123,8 @@ def main(args):
             "n_obs_steps": 2,
             "horizon": int(
                 np.ceil(
-                    cfg.datamodule.lang_dataset.max_window_size
-                    / cfg.datamodule.lang_dataset.num_subgoals
+                    cfg.datamodule[dataset_name]["max_window_size"]
+                    / cfg.datamodule[dataset_name]["num_subgoals"]
                 )
             )
             - 1,
@@ -129,6 +137,7 @@ def main(args):
             },
             "n_action_steps": 8,
             "input_normalization_modes": {},
+            "output_normalization_modes": {"action": "min_max"},
         }
     )
     diff_cfg = DiffusionConfig(**diff_cfg)
@@ -164,13 +173,16 @@ def main(args):
     policy.train()
     policy.to(device)
 
+    # Training parameters
+    print("Number of training parameters:", sum(p.numel() for p in policy.parameters()))
+
     optimizer = torch.optim.Adam(policy.parameters(), lr=1e-4)
 
     # Create dataloader for offline training.
     dataloader = torch.utils.data.DataLoader(
         train_set,
         num_workers=4,
-        batch_size=cfg.datamodule.lang_dataset.batch_size,
+        batch_size=cfg.datamodule[dataset_name]["batch_size"],
         shuffle=True,
         pin_memory=device != torch.device("cpu"),
         drop_last=True,
@@ -234,5 +246,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--num_subgoals", type=int, default=8
     )  # set to number of subgoals
+    parser.add_argument(
+        "--train_on", type=str, default="lang"
+    )  # set to train on language labelled dataset (1% "lang") or full dataset (100% "vis")
     args = parser.parse_args()
     main(args)
