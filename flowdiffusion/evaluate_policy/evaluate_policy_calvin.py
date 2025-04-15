@@ -115,7 +115,7 @@ class CustomModel(CalvinBaseModel):
                 timesteps=100,
                 sampling_timesteps=self.sample_steps,
                 loss_type="l2",
-                objective="pred_v",
+                objective=cfg.high_level.diffusion_objective,
                 beta_schedule="cosine",
                 min_snr_loss_weight=True,
                 auto_normalize=False,
@@ -415,14 +415,14 @@ if __name__ == "__main__":
         "--high_level_checkpoint_num",
         type=int,
         help="High level checkpoint number",
-        default=40,
+        default=100,
     )
 
     parser.add_argument(
         "--high_level_results_folder",
         type=str,
         help="Results folder",
-        default="/home/grislain/AVDC/calvin/models/results_huit/calvin",
+        default="/home/grislain/AVDC/calvin/models/results_huit_ann/calvin",
     )
 
     parser.add_argument(
@@ -536,41 +536,17 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid server argument")
 
-    # High level config
-    high_level_cfg = DictConfig(
-        {
-            "root": data_path,
-            "datamodule": {
-                "lang_dataset": {
-                    "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset",
-                    "key": "lang",
-                    "save_format": "npz",
-                    "batch_size": 32,
-                    "min_window_size": 16,
-                    "max_window_size": 65,
-                    "proprio_state": {
-                        "n_state_obs": 8,
-                        "keep_indices": [[0, 7], [14, 15]],
-                        "robot_orientation_idx": [3, 6],
-                        "normalize": True,
-                        "normalize_robot_orientation": True,
-                    },
-                    "obs_space": {
-                        "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
-                        "depth_obs": [],
-                        "state_obs": ["robot_obs"],
-                        "actions": ["actions"],
-                        "language": ["language"],
-                    },
-                    "num_subgoals": args.num_subgoals,
-                    "pad": True,
-                    "lang_folder": "lang_annotations",
-                    "num_workers": 2,
-                    "diffuse_on": "pixel",
-                },
-            },
-        }
+    # load high level config
+    high_level_cfg = OmegaConf.load(
+        os.path.join(
+            args.high_level_results_folder,
+            "data_config.yaml",
+        )
     )
+    high_level_cfg.datamodule.lang_dataset._target_ = (
+        "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset"
+    )
+    high_level_cfg.root = data_path
 
     transforms_dict = OmegaConf.load(
         os.path.join(
