@@ -350,9 +350,9 @@ class ComposeTensor:
         self.transforms = transforms
 
     def __call__(self, x):
-        unorm_x = (x + 1) / 2
+        x = (x + 1) / 2
         for t in self.transforms:
-            x = t(unorm_x)
+            x = t(x).clamp(0, 1)
         norm_x = (x - 0.5) * 2
         return norm_x
 
