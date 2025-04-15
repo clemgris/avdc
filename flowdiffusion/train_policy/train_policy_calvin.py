@@ -80,7 +80,7 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": "pixel",
-                    "prob_aug": 0.2,
+                    "prob_aug": args.data_aug_prob,
                 },
             },
             "training_steps": 150000,  # In gradient steps
@@ -252,5 +252,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--train_on", type=str, default="lang"
     )  # set to train on language labelled dataset (1% "lang") or full dataset (100% "vis")
+    parser.add_argument(
+        "--data_aug_prob", type=float, default=0.0
+    )  # set to probability of data augmentation (0.0 for no augmentation)
     args = parser.parse_args()
     main(args)
