@@ -79,6 +79,7 @@ def main(args):
             },
             "train_num_steps": args.train_num_steps,
             "save_and_sample_every": args.save_and_sample_every,
+            "diffusion_objective": args.diff_objective,
         }
     )
 
@@ -198,7 +199,7 @@ def main(args):
         timesteps=100,
         sampling_timesteps=args.sample_steps,
         loss_type="l2",
-        objective="pred_x0",  # "pred_v",
+        objective=args.diff_objective,
         beta_schedule="cosine",
         min_snr_loss_weight=True,
         auto_normalize=False,
@@ -474,6 +475,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--save_and_sample_every", type=int, default=2500
     )  # set to number of steps to save and sample
+    parser.add_argument(
+        "--diff_objective",
+        type=str,
+        default="pred_v",
+        choices=["pred_x0", "pred_v", "pred_noise"],
+    )  # set to diffusion objective
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":
