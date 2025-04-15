@@ -523,7 +523,6 @@ class DiskActionDataset(BaseDataset):
             chunk_size = int(np.ceil(num_frames / self.num_subgoals))
             for j in range(0, max(1, num_frames - chunk_size)):
                 episode_lookup.append((start_idx, end_idx, j))
-
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
     def _build_file_indices(self, abs_datasets_dir: Path) -> np.ndarray:
@@ -695,16 +694,14 @@ class DiskActionDataset(BaseDataset):
             sequence = self._pad_sequence(sequence, pad_size)
 
         start_image = sequence["rgb_obs"]["rgb_static"][0]
-        actions = np.array(sequence["actions"][:-1], dtype=np.float32)
+        actions = sequence["actions"][:-1]
         end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
             sequence["rgb_obs"]["rgb_static"][-1]
         )
-
-        print(sequence["rgb_obs"]["rgb_static"].shape)
         # Stack start and end images
-        start_end_images = np.stack([start_image, end_image], dtype=np.float32)
-        state = np.zeros((2, 0), dtype=np.float32)
-        action_is_pad = np.zeros_like(actions, dtype=np.int32)
+        start_end_images = torch.stack([start_image, end_image])
+        state = torch.zeros((2, 0))
+        action_is_pad = torch.zeros_like(actions)
 
         res = {
             "observation.image": start_end_images,
