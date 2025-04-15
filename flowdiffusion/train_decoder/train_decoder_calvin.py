@@ -42,7 +42,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def main(args):
     target_size = (96, 96)
 
-    results_folder = "../results_decoder_debug/calvin"
+    results_folder = args.results_folder
     results_folder = Path(results_folder)
 
     if args.server == "jz":
@@ -79,6 +79,7 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": "dino_feat",
+                    "norm_dino_feat": "l2",  # "l2" or "min_max" or "z_score" or None
                 },
             },
         }
@@ -182,7 +183,7 @@ def main(args):
         for data in tqdm(
             train_loader, desc=f"Epoch {epoch} / {training_cfg.num_epochs}"
         ):
-            image, patch_emb = data
+            _, image, patch_emb = data
             patch_emb = patch_emb.to(device)
             image = image.to(device)
             rec_image = decoder_model(patch_emb)
@@ -202,7 +203,7 @@ def main(args):
             decoder_model.eval()
             all_eval_losses = []
             for data in tqdm(valid_loader, desc=f"Eval Epoch {epoch}"):
-                image, patch_emb = data
+                _, image, patch_emb = data
                 patch_emb = patch_emb.to(device)
                 image = image.to(device)
 
@@ -240,5 +241,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-o", "--override", type=bool, default=False
     )  # set to True to overwrite results folder
+    parser.add_argument(
+        "-r", "--results_folder", type=str, default="../results_decoder_l2/calvin"
+    )  # set to path to results folder
     args = parser.parse_args()
     main(args)
