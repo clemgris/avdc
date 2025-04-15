@@ -144,10 +144,13 @@ def main(args):
 
     cfg["diff_cfg"] = diff_cfg
 
-    stats_path = os.path.join(cfg.root, "training/dataset_stats.pkl")
+    stats_path = os.path.join(cfg.root, f"training/{dataset_name}/dataset_stats.pkl")
     if os.path.exists(stats_path):
         train_stats = pickle.load(open(stats_path, "rb"))
     else:
+        stats_folder = os.path.join(cfg.root, f"training/{dataset_name}")
+        os.makedirs(stats_folder, exist_ok=True)
+
         # Create stats
         train_stats = {
             "action": {},
