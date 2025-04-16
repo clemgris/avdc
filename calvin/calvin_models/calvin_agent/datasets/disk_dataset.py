@@ -1,4 +1,5 @@
 import logging
+import os
 import pickle
 import random
 import re
@@ -23,52 +24,31 @@ from torchvision.transforms import functional as F
 logger = logging.getLogger(__name__)
 
 
-# def lookup_naming_pattern(
-#     dataset_dir: Path, save_format: str
-# ) -> Tuple[Tuple[Path, str], int]:
-#     """
-#     Check naming pattern of dataset files.
-
-#     Args:
-#         dataset_dir: Path to dataset.
-#         save_format: File format (CALVIN default is npz).
-
-#     Returns:
-#         naming_pattern: 'file_0000001.npz' -> ('file_', '.npz')
-#         n_digits: Zero padding of file enumeration.
-#     """
-#     it = os.scandir(dataset_dir)
-#     while True:
-#         filename = Path(next(it))
-#         if save_format in filename.suffix:
-#             break
-#     aux_naming_pattern = re.split(r"\d+", filename.stem)
-#     naming_pattern = (filename.parent / aux_naming_pattern[0], filename.suffix)
-#     n_digits = len(re.findall(r"\d+", filename.stem)[0])
-#     assert len(naming_pattern) == 2
-#     assert n_digits > 0
-#     return naming_pattern, n_digits
-
-
 def lookup_naming_pattern(
     dataset_dir: Path, save_format: str
-) -> Tuple[Path, str, str, int]:
+) -> Tuple[Tuple[Path, str], int]:
     """
-    Discover the naming pattern for dataset files (even if nested in subfolders).
-    """
-    matches = list(dataset_dir.rglob(f"episode_*.{save_format}"))
-    if not matches:
-        raise FileNotFoundError(
-            f"No files with format {save_format} found in {dataset_dir}"
-        )
+    Check naming pattern of dataset files.
 
-    filename = matches[0]
+    Args:
+        dataset_dir: Path to dataset.
+        save_format: File format (CALVIN default is npz).
+
+    Returns:
+        naming_pattern: 'file_0000001.npz' -> ('file_', '.npz')
+        n_digits: Zero padding of file enumeration.
+    """
+    it = os.scandir(dataset_dir)
+    while True:
+        filename = Path(next(it))
+        if save_format in filename.suffix:
+            break
     aux_naming_pattern = re.split(r"\d+", filename.stem)
-    prefix = aux_naming_pattern[0]
+    naming_pattern = (filename.parent / aux_naming_pattern[0], filename.suffix)
     n_digits = len(re.findall(r"\d+", filename.stem)[0])
-    suffix = filename.suffix
+    assert len(naming_pattern) == 2
     assert n_digits > 0
-    return dataset_dir, prefix, suffix, n_digits
+    return naming_pattern, n_digits
 
 
 def load_pkl(filename: Path) -> Dict[str, np.ndarray]:
@@ -115,30 +95,14 @@ class DiskDiffusionDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
-        # self.naming_pattern, self.n_digits = lookup_naming_pattern(
-        #     self.abs_datasets_dir, self.save_format
-        # )
-
-        self.dataset_dir, self.prefix, self.suffix, self.n_digits = (
-            lookup_naming_pattern(self.abs_datasets_dir, self.save_format)
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
         )
 
-    # def _get_episode_name(self, file_idx: int) -> Path:
-    #     return Path(
-    #         f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
-    #     )
     def _get_episode_name(self, file_idx: int) -> Path:
-        filename = f"{self.prefix}{file_idx:0{self.n_digits}d}{self.suffix}"
-        matches = list(self.dataset_dir.rglob(filename))
-        if not matches:
-            raise FileNotFoundError(
-                f"Episode file {filename} not found under {self.dataset_dir}"
-            )
-        if len(matches) > 1:
-            raise AssertionError(
-                f"Episode file {filename} found in multiple locations: {matches}"
-            )
-        return matches[0]
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
         return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
@@ -263,32 +227,16 @@ class DiskImageDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
-        # self.naming_pattern, self.n_digits = lookup_naming_pattern(
-        #     self.abs_datasets_dir, self.save_format
-        # )
-
-        self.dataset_dir, self.prefix, self.suffix, self.n_digits = (
-            lookup_naming_pattern(self.abs_datasets_dir, self.save_format)
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
         )
 
         self.frame_indices = self._generate_frame_indices()
 
-    # def _get_episode_name(self, file_idx: int) -> Path:
-    #     return Path(
-    #         f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
-    #     )
     def _get_episode_name(self, file_idx: int) -> Path:
-        filename = f"{self.prefix}{file_idx:0{self.n_digits}d}{self.suffix}"
-        matches = list(self.dataset_dir.rglob(filename))
-        if not matches:
-            raise FileNotFoundError(
-                f"Episode file {filename} not found under {self.dataset_dir}"
-            )
-        if len(matches) > 1:
-            raise AssertionError(
-                f"Episode file {filename} found in multiple locations: {matches}"
-            )
-        return matches[0]
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
         return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
@@ -464,32 +412,16 @@ class DiskActionDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
-        # self.naming_pattern, self.n_digits = lookup_naming_pattern(
-        #     self.abs_datasets_dir, self.save_format
-        # )
-
-        self.dataset_dir, self.prefix, self.suffix, self.n_digits = (
-            lookup_naming_pattern(self.abs_datasets_dir, self.save_format)
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
         )
 
         self.prob_data_aug = prob_aug
 
-    # def _get_episode_name(self, file_idx: int) -> Path:
-    #     return Path(
-    #         f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
-    #     )
     def _get_episode_name(self, file_idx: int) -> Path:
-        filename = f"{self.prefix}{file_idx:0{self.n_digits}d}{self.suffix}"
-        matches = list(self.dataset_dir.rglob(filename))
-        if not matches:
-            raise FileNotFoundError(
-                f"Episode file {filename} not found under {self.dataset_dir}"
-            )
-        if len(matches) > 1:
-            raise AssertionError(
-                f"Episode file {filename} found in multiple locations: {matches}"
-            )
-        return matches[0]
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
         return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
@@ -815,29 +747,14 @@ class DiskEvaluatorDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
-        # self.naming_pattern, self.n_digits = lookup_naming_pattern(
-        #     self.abs_datasets_dir, self.save_format
-        # )
-        self.dataset_dir, self.prefix, self.suffix, self.n_digits = (
-            lookup_naming_pattern(self.abs_datasets_dir, self.save_format)
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
         )
 
-    # def _get_episode_name(self, file_idx: int) -> Path:
-    #     return Path(
-    #         f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
-    #     )
     def _get_episode_name(self, file_idx: int) -> Path:
-        filename = f"{self.prefix}{file_idx:0{self.n_digits}d}{self.suffix}"
-        matches = list(self.dataset_dir.rglob(filename))
-        if not matches:
-            raise FileNotFoundError(
-                f"Episode file {filename} not found under {self.dataset_dir}"
-            )
-        if len(matches) > 1:
-            raise AssertionError(
-                f"Episode file {filename} found in multiple locations: {matches}"
-            )
-        return matches[0]
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
         return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
@@ -1036,29 +953,14 @@ class DiskDiffusionOracleDataset(BaseDataset):
         else:
             self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
 
-        # self.naming_pattern, self.n_digits = lookup_naming_pattern(
-        #     self.abs_datasets_dir, self.save_format
-        # )
-        self.dataset_dir, self.prefix, self.suffix, self.n_digits = (
-            lookup_naming_pattern(self.abs_datasets_dir, self.save_format)
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
         )
 
-    # def _get_episode_name(self, file_idx: int) -> Path:
-    #     return Path(
-    #         f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
-    #     )
     def _get_episode_name(self, file_idx: int) -> Path:
-        filename = f"{self.prefix}{file_idx:0{self.n_digits}d}{self.suffix}"
-        matches = list(self.dataset_dir.rglob(filename))
-        if not matches:
-            raise FileNotFoundError(
-                f"Episode file {filename} not found under {self.dataset_dir}"
-            )
-        if len(matches) > 1:
-            raise AssertionError(
-                f"Episode file {filename} found in multiple locations: {matches}"
-            )
-        return matches[0]
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
         return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
