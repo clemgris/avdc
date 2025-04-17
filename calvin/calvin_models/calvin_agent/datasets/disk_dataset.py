@@ -105,7 +105,10 @@ class DiskDiffusionDataset(BaseDataset):
         )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
-        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
 
     def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
         """
@@ -239,7 +242,10 @@ class DiskImageDataset(BaseDataset):
         )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
-        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
 
     def _generate_frame_indices(self) -> List[Tuple[int, int]]:
         """
@@ -442,6 +448,7 @@ class DiskActionDataset(BaseDataset):
         )
 
         self.prob_data_aug = prob_aug
+        self.with_lang = False
 
     def _get_episode_name(self, file_idx: int) -> Path:
         return Path(
@@ -449,7 +456,10 @@ class DiskActionDataset(BaseDataset):
         )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
-        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
 
     def __len__(self) -> int:
         return len(self.episode_lookup)
@@ -489,9 +499,6 @@ class DiskActionDataset(BaseDataset):
         ]
 
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
-        if self.with_lang:
-            episode["language"] = self.lang_ann[self.lang_lookup[idx]]
-            episode["task"] = self.lang_task[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
@@ -782,7 +789,10 @@ class DiskEvaluatorDataset(BaseDataset):
         )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
-        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
 
     def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
         """
@@ -988,7 +998,10 @@ class DiskDiffusionOracleDataset(BaseDataset):
         )
 
     def _get_dino_feat_name(self, file_idx: int) -> Path:
-        return Path(self.abs_datasets_dir / f"features/dino_features_{file_idx}.npz")
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
 
     def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
         """
