@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -15,7 +14,6 @@ sys.path.append(
     )
 )
 
-import pickle
 
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -141,38 +139,25 @@ def main(args):
         }
     )
     diff_cfg = DiffusionConfig(**diff_cfg)
-
     cfg["diff_cfg"] = diff_cfg
 
-    stats_path = os.path.join(cfg.root, f"training/{dataset_name}/dataset_stats.pkl")
-    if os.path.exists(stats_path):
-        train_stats = pickle.load(open(stats_path, "rb"))
-    else:
-        stats_folder = os.path.join(cfg.root, f"training/{dataset_name}")
-        os.makedirs(stats_folder, exist_ok=True)
+    # Load training statistics
+    stats_path = os.path.join(data_path, "training/statistics.yaml")
+    train_stats = OmegaConf.load(stats_path)
 
-        # Create stats
-        train_stats = {
-            "action": {},
+    train_stats_dict = {
+        "action": {
+            "max": torch.Tensor(train_stats.act_max_bound),
+            "min": torch.Tensor(train_stats.act_min_bound),
         }
-        all_actions = []
-        for data in tqdm(train_set, desc="Generating stats"):
-            action = data["action"][0]
-            all_actions.append(action)
-        train_stats["action"]["mean"] = torch.mean(torch.stack(all_actions), dim=0)
-        train_stats["action"]["std"] = torch.std(torch.stack(all_actions), dim=0)
-        train_stats["action"]["min"] = torch.min(torch.stack(all_actions), dim=0).values
-        train_stats["action"]["max"] = torch.max(torch.stack(all_actions), dim=0).values
-
-        # Save stats
-        pickle.dump(train_stats, open(stats_path, "wb"))
+    }
 
     cfg["stats_path"] = stats_path
     # Save cfg
     with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
         file.write(OmegaConf.to_yaml(cfg))
 
-    policy = DiffusionPolicy(diff_cfg, dataset_stats=train_stats)
+    policy = DiffusionPolicy(diff_cfg, dataset_stats=train_stats_dict)
     policy.train()
     policy.to(device)
 
