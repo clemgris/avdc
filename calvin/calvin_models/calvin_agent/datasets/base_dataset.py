@@ -81,7 +81,8 @@ class BaseDataset(Dataset):
         self.proprio_state = proprio_state
         self.transforms = transforms
         self.with_lang = key == "lang"
-        self.with_dino_feat = diffuse_on == "dino_feat"
+        self.with_dino_feat = diffuse_on != "pixel"
+        self.diffuse_on = diffuse_on
         self.relative_actions = "rel_actions" in self.observation_space["actions"]
 
         self.pad = pad
@@ -101,7 +102,7 @@ class BaseDataset(Dataset):
         logger.info(f"loading dataset at {self.abs_datasets_dir}")
         logger.info("finished loading dataset")
 
-        self.dino_stats_path = self.abs_datasets_dir / "../dino_stats.pt"
+        self.dino_stats_path = self.abs_datasets_dir / "../{self.diffuse_on}_stats.pt"
         self.norm_dino_feat = norm_dino_feat
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
@@ -123,7 +124,7 @@ class BaseDataset(Dataset):
         dino_features = sequence["dino_features"]
 
         if self.with_dino_feat:
-            x_cond = dino_features[0]
+            x_cond = dino_features[0][None, ...]
             x_cond = rearrange(x_cond, "f wh c -> f c wh")
             x_cond = rearrange(x_cond, "f c (w h) -> f c w h", w=16, h=16)
             x_cond = x_cond.squeeze(0)
