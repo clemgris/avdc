@@ -19,7 +19,7 @@ sys.path.append(
     )
 )
 
-from encoder import DinoV2Encoder  # noqa: E402
+from encoder import DinoV2Encoder, ViTEncoder
 
 sys.path.append(
     os.path.join(
@@ -67,15 +67,29 @@ def main(args):
         }
     )
 
-    transforms = OmegaConf.load(
-        os.path.join(
-            root_path,
-            "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
+    if args.features == "dino":
+        print("Using dino features with transform from play_nothing.yaml")
+        transforms = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/datamodule/transforms/play_nothing.yaml",
+            )
         )
-    )
+    elif args.features == "dino_vit":
+        print("Using dino_vit features with transform from play_features_extract.yaml")
+        transforms = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
+            )
+        )
 
-    os.makedirs(os.path.join(cfg.root, "training/features"), exist_ok=True)
-    os.makedirs(os.path.join(cfg.root, "validation/features"), exist_ok=True)
+    os.makedirs(
+        os.path.join(cfg.root, f"training/features_{args.features}"), exist_ok=True
+    )
+    os.makedirs(
+        os.path.join(cfg.root, f"validation/features_{args.features}"), exist_ok=True
+    )
     with open(os.path.join(cfg.root, "dino_feat_config.yaml"), "w") as file:
         file.write(OmegaConf.to_yaml(cfg))
 
@@ -123,6 +137,13 @@ def main(args):
             )
         else:
             raise ValueError(f"Unknown server {args.server}")
+    elif args.features == "dino_vit":
+        if args.server == "hacienda":
+            encoder_model = ViTEncoder()
+        elif args.server == "jz":
+            encoder_model = ViTEncoder()
+        else:
+            raise ValueError(f"Unknown server {args.server}")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
@@ -132,66 +153,72 @@ def main(args):
     min = torch.ones((256, 768)) * 1e10
     max = torch.ones((256, 768)) * -1e10
 
-    for data in tqdm(
-        train_loader, desc=f"Generate {args.features} features of training data"
-    ):
-        frame_idx, image, _ = data
-        cls_emb, patch_emb = encoder_model(image)
+    # for data in tqdm(
+    #     train_loader, desc=f"Generate {args.features} features of training data"
+    # ):
+    #     frame_idx, image, _ = data
+    #     _, patch_emb = encoder_model(image.to("cuda"))
+    #     patch_emb = patch_emb.cpu()
 
-        for i in range(len(frame_idx)):
-            all_emb = {}
-            all_emb["cls_emb"] = cls_emb[i].cpu().numpy()
-            all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
-            all_emb["frame_idx"] = frame_idx[i].cpu().item()
+    #     for i in range(len(frame_idx)):
+    #         all_emb = {}
+    #         all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
+    #         all_emb["frame_idx"] = frame_idx[i].cpu().item()
 
-            # Save as npz
-            np.savez(
-                Path(cfg.root)
-                / f"training/features/{args.features}_features_{all_emb['frame_idx']}.npz",
-                **all_emb,
-            )
+    #         # Save as npz
+    #         np.savez(
+    #             Path(cfg.root)
+    #             / f"training/features_{args.features}/features_{all_emb['frame_idx']}.npz",
+    #             **all_emb,
+    #         )
 
-            # Update stats
-            min = torch.min(min, patch_emb[i])
-            max = torch.max(max, patch_emb[i])
-            sum += patch_emb[i]
-            sum_squared += patch_emb[i] ** 2
+    #         # Update stats
+    #         min = torch.min(min, patch_emb[i])
+    #         max = torch.max(max, patch_emb[i])
+    #         sum += patch_emb[i]
+    #         sum_squared += patch_emb[i] ** 2
 
-    print("Training features saved in ", cfg.root + "/training/features")
+    # print(
+    #     "Training features saved in ", cfg.root + f"/training/features_{args.features}"
+    # )
 
-    # Save stats
-    num_data = len(train_loader)
-    stats = {"dino_features": {}}
-    stats["dino_features"]["mean"] = sum / num_data
-    stats["dino_features"]["std"] = torch.sqrt(
-        sum_squared / num_data - stats["dino_features"]["mean"] ** 2
-    )
-    stats["dino_features"]["min"] = min
-    stats["dino_features"]["max"] = max
+    # # Save stats
+    # num_data = len(train_loader)
+    # stats = {"dino_features": {}}
+    # stats["dino_features"]["mean"] = sum / num_data
+    # stats["dino_features"]["std"] = torch.sqrt(
+    #     sum_squared / num_data - stats["dino_features"]["mean"] ** 2
+    # )
+    # stats["dino_features"]["min"] = min
+    # stats["dino_features"]["max"] = max
 
-    # Save in root directory with pickle
-    torch.save(stats, os.path.join(cfg.root, "dino_stats.pt"))
-    print("Stats saved in", os.path.join(cfg.root, "dino_stats.pt"))
+    # # Save in root directory with pickle
+    # torch.save(stats, os.path.join(cfg.root, f"{args.features}_stats.pt"))
+    # print("Stats saved in", os.path.join(cfg.root, f"{args.features}_stats.pt"))
 
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
     ):
         frame_idx, image, _ = data
-        cls_emb, patch_emb = encoder_model(image)
+        _, patch_emb = encoder_model(image.to("cuda"))
+        patch_emb = patch_emb.cpu()
+
         for i in range(len(frame_idx)):
             eval_emb = {}
-            eval_emb["cls_emb"] = cls_emb[i].cpu().numpy()
             eval_emb["patch_emb"] = patch_emb[i].cpu().numpy()
             eval_emb["frame_idx"] = frame_idx[i].cpu().item()
 
             # save as npz
             np.savez(
                 Path(cfg.root)
-                / f"validation/features/{args.features}_features_{eval_emb['frame_idx']}.npz",
+                / f"validation/features_{args.features}/features_{eval_emb['frame_idx']}.npz",
                 **eval_emb,
             )
 
-    print("Validation features saved in ", cfg.root + "/validation/features")
+    print(
+        "Validation features saved in ",
+        cfg.root + f"/validation/features_{args.features}",
+    )
 
 
 if __name__ == "__main__":
@@ -211,6 +238,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "-b", "--batch_size", type=int, default=32
     )  # batch size for dataloader
-    parser.add_argument("-f", "--features", type=str, default="dino")
+    parser.add_argument("-f", "--features", type=str, default="dino_vit")
     args = parser.parse_args()
     main(args)
