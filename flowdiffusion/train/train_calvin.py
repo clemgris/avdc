@@ -72,9 +72,7 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": args.diffuse_on,
-                    "norm_dino_feat": "l2"
-                    if args.diffuse_on == "dino_feat"
-                    else None,  # 'z_score' or 'min_max' or 'l2' or None
+                    "norm_dino_feat": args.norm,
                 },
             },
             "train_num_steps": args.train_num_steps,
@@ -87,7 +85,7 @@ def main(args):
 
     sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
-    if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+    if "dino" in cfg.datamodule.lang_dataset.diffuse_on:
         target_size = (16, 16)
         channel = 768
     elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
@@ -156,7 +154,7 @@ def main(args):
 
     if args.diffuse_on == "pixel":
         channel_mult = (1, 2, 3, 4, 5)
-    elif args.diffuse_on == "dino_feat":
+    elif "dino" in args.diffuse_on:
         channel_mult = (1, 2, 3)
     unet = Unet(channel, channel_mult=channel_mult)
 
@@ -174,7 +172,7 @@ def main(args):
 
     decoder_weigth_path = args.feature_decoder_checkpoint_path
 
-    if cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+    if "dino" in cfg.datamodule.lang_dataset.diffuse_on:
         import torch
         from decoder import TransposedConvDecoder
 
@@ -316,7 +314,7 @@ def main(args):
                 imageio.mimsave(output_gif, output, duration=200, loop=1000)
                 print(f"Generated {output_gif}")
 
-        elif cfg.datamodule.lang_dataset.diffuse_on == "dino_feat":
+        elif "dino" in cfg.datamodule.lang_dataset.diffuse_on:
             from decoder import TransposedConvDecoder
             from encoder import DinoV2Encoder
 
@@ -448,7 +446,7 @@ if __name__ == "__main__":
         "-g", "--guidance_weight", type=int, default=0
     )  # set to positive to use guidance
     parser.add_argument(
-        "--diffuse_on", type=str, default="pixel", choices=["pixel", "dino_feat"]
+        "--diffuse_on", type=str, default="pixel", choices=["pixel", "dino", "dino_vit"]
     )  # set to 'pixel' or 'dino_feat' to diffuse on pixel or dino features
     parser.add_argument(
         "--num_subgoals", type=int, default=8
@@ -481,6 +479,9 @@ if __name__ == "__main__":
         default="pred_v",
         choices=["pred_x0", "pred_v", "pred_noise"],
     )  # set to diffusion objective
+    parser.add_argument(
+        "--norm", type=str, default=None, choices=[None, "l2", "z_score", "min_max"]
+    )  # set to normalisation type for features
     args = parser.parse_args()
 
     if args.diffuse_on == "diffuse_on":
