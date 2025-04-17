@@ -271,10 +271,12 @@ class DiskImageDataset(BaseDataset):
         keys.append("scene_obs")
 
         frame = self.load_file(self._get_episode_name(frame_idx))
-        dino_feat = self.load_file(self._get_dino_feat_name(frame_idx))
+        if self.with_dino_feat:
+            dino_feat = self.load_file(self._get_dino_feat_name(frame_idx))
 
         sample = {key: frame[key] for key in keys}
-        sample["dino_features"] = dino_feat["patch_emb"]
+        if self.with_dino_feat:
+            sample["dino_features"] = dino_feat["patch_emb"]
 
         rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
         dino_feat = process_features(
@@ -332,6 +334,29 @@ class DiskImageDataset(BaseDataset):
             episode_lookup.append((start_idx, end_idx))
 
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
+
+    def _build_file_indices(self, abs_datasets_dir: Path) -> np.ndarray:
+        """
+        This method builds the mapping from index to file_name used for loading the episodes of the non language
+        dataset.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        ep_start_end_ids = np.load(abs_datasets_dir / "ep_start_end_ids.npy")
+        logger.info(
+            f'Found "ep_start_end_ids.npy" with {len(ep_start_end_ids)} episodes.'
+        )
+        count = 0
+        for start, end in ep_start_end_ids:
+            count += end - start + 1
+        logger.info(f"Found {count} frames")
+        return ep_start_end_ids
 
 
 class RandomApplyTransform:
