@@ -42,8 +42,10 @@ def main(args):
 
     if args.train_on == "lang":
         dataset_name = "lang_dataset"
+        dataset_key = "lang"
     elif args.train_on == "vis":
         dataset_name = "vis_dataset"
+        dataset_key = "vis"
     else:
         raise ValueError(f"Unknown dataset name {args.train_on}")
     print(f"Training on {dataset_name} dataset")
@@ -54,7 +56,7 @@ def main(args):
             "datamodule": {
                 dataset_name: {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskActionDataset",
-                    "key": "vis",
+                    "key": dataset_key,
                     "save_format": "npz",
                     "batch_size": 32,
                     "min_window_size": 32,
@@ -106,8 +108,8 @@ def main(args):
             )
     results_folder.mkdir(exist_ok=True, parents=True)
 
-    train_set = data_module.train_datasets["vis"]
-    valid_set = data_module.val_datasets["vis"]
+    train_set = data_module.train_datasets[dataset_key]
+    valid_set = data_module.val_datasets[dataset_key]
 
     print("Train data:", len(train_set))
     print("Valid data:", len(valid_set))
