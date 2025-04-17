@@ -38,9 +38,9 @@ def main(args):
         {
             "root": args.root,
             "datamodule": {
-                "lang_dataset": {
+                "vis_dataset": {
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskImageDataset",
-                    "key": "lang",
+                    "key": "vis",
                     "save_format": "npz",
                     "batch_size": 32,
                     "min_window_size": 16,
@@ -85,8 +85,8 @@ def main(args):
 
     data_module.setup()
 
-    train_set = data_module.train_datasets["lang"]
-    valid_set = data_module.val_datasets["lang"]
+    train_set = data_module.train_datasets["vis"]
+    valid_set = data_module.val_datasets["vis"]
 
     print("Train data (img):", len(train_set))
     print("Valid data (img):", len(valid_set))
@@ -140,8 +140,8 @@ def main(args):
 
         for i in range(len(frame_idx)):
             all_emb = {}
-            all_emb["cls_emb"] = np.array(cls_emb[i].cpu())
-            all_emb["patch_emb"] = np.array(patch_emb[i].cpu())
+            all_emb["cls_emb"] = cls_emb[i].cpu().numpy()
+            all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
             all_emb["frame_idx"] = frame_idx[i].cpu().item()
 
             # Save as npz
@@ -180,8 +180,8 @@ def main(args):
         cls_emb, patch_emb = encoder_model(image)
         for i in range(len(frame_idx)):
             eval_emb = {}
-            eval_emb["cls_emb"] = np.array(cls_emb[i].cpu())
-            eval_emb["patch_emb"] = np.array(patch_emb[i].cpu())
+            eval_emb["cls_emb"] = cls_emb[i].cpu().numpy()
+            eval_emb["patch_emb"] = patch_emb[i].cpu().numpy()
             eval_emb["frame_idx"] = frame_idx[i].cpu().item()
 
             # save as npz
