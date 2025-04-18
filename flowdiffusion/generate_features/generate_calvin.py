@@ -153,48 +153,49 @@ def main(args):
     min = torch.ones((256, 768)) * 1e10
     max = torch.ones((256, 768)) * -1e10
 
-    # for data in tqdm(
-    #     train_loader, desc=f"Generate {args.features} features of training data"
-    # ):
-    #     frame_idx, image, _ = data
-    #     _, patch_emb = encoder_model(image.to("cuda"))
-    #     patch_emb = patch_emb.cpu()
+    for data in tqdm(
+        train_loader, desc=f"Generate {args.features} features of training data"
+    ):
+        frame_idx, image, _ = data
+        _, patch_emb = encoder_model(image.to("cuda"))
+        patch_emb = patch_emb.cpu()
+        breakpoint()
 
-    #     for i in range(len(frame_idx)):
-    #         all_emb = {}
-    #         all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
-    #         all_emb["frame_idx"] = frame_idx[i].cpu().item()
+        for i in range(len(frame_idx)):
+            all_emb = {}
+            all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
+            all_emb["frame_idx"] = frame_idx[i].cpu().item()
 
-    #         # Save as npz
-    #         np.savez(
-    #             Path(cfg.root)
-    #             / f"training/features_{args.features}/features_{all_emb['frame_idx']}.npz",
-    #             **all_emb,
-    #         )
+            # Save as npz
+            np.savez(
+                Path(cfg.root)
+                / f"training/features_{args.features}/features_{all_emb['frame_idx']}.npz",
+                **all_emb,
+            )
 
-    #         # Update stats
-    #         min = torch.min(min, patch_emb[i])
-    #         max = torch.max(max, patch_emb[i])
-    #         sum += patch_emb[i]
-    #         sum_squared += patch_emb[i] ** 2
+            # Update stats
+            min = torch.min(min, patch_emb[i])
+            max = torch.max(max, patch_emb[i])
+            sum += patch_emb[i]
+            sum_squared += patch_emb[i] ** 2
 
-    # print(
-    #     "Training features saved in ", cfg.root + f"/training/features_{args.features}"
-    # )
+    print(
+        "Training features saved in ", cfg.root + f"/training/features_{args.features}"
+    )
 
-    # # Save stats
-    # num_data = len(train_loader)
-    # stats = {"dino_features": {}}
-    # stats["dino_features"]["mean"] = sum / num_data
-    # stats["dino_features"]["std"] = torch.sqrt(
-    #     sum_squared / num_data - stats["dino_features"]["mean"] ** 2
-    # )
-    # stats["dino_features"]["min"] = min
-    # stats["dino_features"]["max"] = max
+    # Save stats
+    num_data = len(train_loader)
+    stats = {"dino_features": {}}
+    stats["dino_features"]["mean"] = sum / num_data
+    stats["dino_features"]["std"] = torch.sqrt(
+        sum_squared / num_data - stats["dino_features"]["mean"] ** 2
+    )
+    stats["dino_features"]["min"] = min
+    stats["dino_features"]["max"] = max
 
-    # # Save in root directory with pickle
-    # torch.save(stats, os.path.join(cfg.root, f"{args.features}_stats.pt"))
-    # print("Stats saved in", os.path.join(cfg.root, f"{args.features}_stats.pt"))
+    # Save in root directory with pickle
+    torch.save(stats, os.path.join(cfg.root, f"{args.features}_stats.pt"))
+    print("Stats saved in", os.path.join(cfg.root, f"{args.features}_stats.pt"))
 
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
