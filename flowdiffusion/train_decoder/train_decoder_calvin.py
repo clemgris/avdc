@@ -97,7 +97,7 @@ def main(args):
             "eval_every": 1,
             "num_epochs": 20,
             "batch_size": 256,
-            "lr": 1e-3,
+            "lr": 1e-4,
             "save_every": 1,
         },
     )
@@ -142,7 +142,7 @@ def main(args):
         train_set,
         batch_size=training_cfg.batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=16,
         pin_memory=True,
         drop_last=True,
     )
