@@ -103,13 +103,12 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
     tot_tasks = Counter()
 
     for episode in high_level_dataset:
-        task = episode["lang"]
+        task = episode["task"]
         results[task] += rollout(
             env, model, episode, task_oracle, args, task, val_annotations
         )
         tot_tasks[task] += 1
         print(f"{task}: {results[task]} / {tot_tasks[task]}")
-
     print("\nResults\n" + "-" * 60)
     for task in results:
         print(f"{task}: {results[task]} / {tot_tasks[task]}")
