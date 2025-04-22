@@ -104,7 +104,7 @@ class BaseDataset(Dataset):
         logger.info(f"loading dataset at {self.abs_datasets_dir}")
         logger.info("finished loading dataset")
 
-        self.dino_stats_path = self.abs_datasets_dir / "../{self.diffuse_on}_stats.pt"
+        self.dino_stats_path = self.abs_datasets_dir / f"../{self.diffuse_on}_stats.pt"
         self.norm_dino_feat = norm_dino_feat
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
