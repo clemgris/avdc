@@ -45,6 +45,8 @@ def main(args):
 
     if args.diffuse_on == "dino_vit":
         diffuse_on = f"dino_vit_{args.feat_patch_size}"
+    else:
+        diffuse_on = args.diffuse_on
 
     cfg = DictConfig(
         {
