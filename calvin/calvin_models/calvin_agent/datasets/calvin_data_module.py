@@ -141,7 +141,7 @@ class CalvinDataModule(pl.LightningDataModule):
         val_dataloaders = {
             key: DataLoader(
                 dataset,
-                batch_size=dataset.batch_size,
+                batch_size=1,
                 num_workers=dataset.num_workers,
                 pin_memory=False,
                 shuffle=self.shuffle_val,
