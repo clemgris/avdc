@@ -241,7 +241,7 @@ def main(args):
         ema_decay=0.999,
         train_batch_size=cfg.datamodule.lang_dataset.batch_size,
         valid_batch_size=1,
-        gradient_accumulate_every=1,
+        gradient_accumulate_every=max(1, 16 // cfg.datamodule.lang_dataset.batch_size),
         num_samples=valid_n,
         results_folder=results_folder,
         fp16=True,
