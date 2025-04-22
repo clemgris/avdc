@@ -1,20 +1,26 @@
 import argparse
 import logging
 import os
+import pickle
 import sys
-from collections import Counter
+import time
+from collections import defaultdict
 from distutils.util import strtobool
 from pathlib import Path
 
 import hydra
 import numpy as np
-import PIL.Image as Image
 import torch
+import torchvision
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
+from PIL import Image
 from pytorch_lightning import seed_everything
 from termcolor import colored
+from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
+
+sys.path.insert(0, Path(__file__).absolute().parents[2].as_posix())
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -25,8 +31,40 @@ sys.path.append(
     )
 )
 
+sys.path.append(
+    os.path.join(
+        root_path,
+        "calvin/calvin_models",
+    )
+)
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from unet import UnetMW as Unet
+
+from calvin.calvin_env.calvin_env.envs.play_table_env import get_env
+from calvin.calvin_models.calvin_agent.evaluation.multistep_sequences import (
+    get_sequences,
+)
+from calvin.calvin_models.calvin_agent.evaluation.utils import (
+    collect_plan,
+    count_success,
+    create_tsne,
+    get_env_state_for_initial_condition,
+    get_log_dir,
+    join_vis_lang,
+    print_and_save,
+)
+from calvin.calvin_models.calvin_agent.models.calvin_base_model import CalvinBaseModel
+from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
+
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(root_path)
+sys.path.append(
+    os.path.join(
+        root_path,
+        "flowdiffusion",
+    )
+)
+
 
 sys.path.append(
     os.path.join(
@@ -34,15 +72,30 @@ sys.path.append(
         "calvin/calvin_models",
     )
 )
-import torchvision
 
 from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
     CalvinDataModule,  # noqa: E402
 )
-from calvin.calvin_models.calvin_agent.models.calvin_base_model import CalvinBaseModel
-from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
 
 logger = logging.getLogger(__name__)
+
+EP_LEN = 360
+NUM_SEQUENCES = 1000
+
+
+def get_epoch(checkpoint):
+    if "=" not in checkpoint.stem:
+        return "0"
+    checkpoint.stem.split("=")[1]
+
+
+def make_env(dataset_path):
+    val_folder = Path(dataset_path) / "validation"
+    env = get_env(val_folder, show_gui=False)
+
+    # insert your own env wrapper
+    # env = Wrapper(env)
+    return env
 
 
 class CustomModel(CalvinBaseModel):
@@ -55,15 +108,7 @@ class CustomModel(CalvinBaseModel):
         self.debug_path = cfg.debug_path
 
         # Low level
-        stats_path = os.path.join(data_path, "training/statistics.yaml")
-        train_stats = OmegaConf.load(stats_path)
-
-        self.stats = {
-            "action": {
-                "max": torch.Tensor(train_stats.act_max_bound),
-                "min": torch.Tensor(train_stats.act_min_bound),
-            }
-        }
+        self.stats = pickle.load(open(self.cfg.policy.stats_path, "rb"))
 
         self.steps = 0
         self.guidance_weight = 3
@@ -208,7 +253,6 @@ class CustomModel(CalvinBaseModel):
                 sample_subgoals = self.steps == 0
 
             if sample_subgoals:
-                print(f"Trial {self.steps // 64}: generating subgoals for {text_goal}")
                 self.sub_goals = (
                     self.high_level.sample(
                         obs_image[0], [text_goal], 1, self.guidance_weight
@@ -223,7 +267,7 @@ class CustomModel(CalvinBaseModel):
                     # Save subgoals
                     self.save_image(
                         self.sub_goals[0],
-                        f"generated_subgoals_{text_goal}_{self.steps // self.ref_traj_length}.png",
+                        f"generated_subgoals_{text_goal}.png",
                     )
 
         if self.steps % self.sample_action_every == 0:
@@ -275,14 +319,30 @@ class CustomModel(CalvinBaseModel):
         return selected_action
 
 
-def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint):
-    if args.server == "jz":
-        conf_dir = Path(
-            "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf"
-        )
-    else:
-        conf_dir = Path("/home/grislain/AVDC/calvin/calvin_models/conf")
+def evaluate_policy(
+    model,
+    env,
+    epoch=0,
+    eval_log_dir=None,
+    debug=False,
+    debug_path=None,
+    create_plan_tsne=False,
+):
+    """
+    Run this function to evaluate a model on the CALVIN challenge.
 
+    Args:
+        model: Must implement methods of CalvinBaseModel.
+        env: (Wrapped) calvin env.
+        epoch:
+        eval_log_dir: Path where to log evaluation results. If None, logs to /tmp/evaluation/
+        debug: If True, show camera view and debug info.
+        create_plan_tsne: Collect data for TSNE plots of latent plans (does not work for your custom model)
+
+    Returns:
+        Dictionary with results
+    """
+    conf_dir = Path(__file__).absolute().parents[2] / "calvin/calvin_models/conf"
     task_cfg = OmegaConf.load(
         conf_dir / "callbacks/rollout/tasks/new_playtable_tasks.yaml"
     )
@@ -291,31 +351,80 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
         conf_dir / "annotations/new_playtable_validation.yaml"
     )
 
-    high_level_dataset = high_level_dataset
+    eval_log_dir = get_log_dir(eval_log_dir)
 
-    results = Counter()
-    tot_tasks = Counter()
+    eval_sequences = get_sequences(NUM_SEQUENCES)
 
-    for episode in high_level_dataset:
-        task = episode["task"]
-        success, length = rollout(
-            env, model, episode, task_oracle, args, task, val_annotations
+    results = []
+    plans = defaultdict(list)
+
+    if not debug:
+        eval_sequences = tqdm(eval_sequences, position=0, leave=True)
+
+    for initial_state, eval_sequence in eval_sequences:
+        result = evaluate_sequence(
+            env,
+            model,
+            task_oracle,
+            initial_state,
+            eval_sequence,
+            val_annotations,
+            plans,
+            debug,
+            debug_path,
         )
-        results[task] += success
-        tot_tasks[task] += 1
-        print(f"{task}: {results[task]} / {tot_tasks[task]} ({length})")
+        results.append(result)
+        if not debug:
+            eval_sequences.set_description(
+                " ".join(
+                    [
+                        f"{i + 1}/5 : {v * 100:.1f}% |"
+                        for i, v in enumerate(count_success(results))
+                    ]
+                )
+                + "|"
+            )
 
-    print("\nResults\n" + "-" * 60)
-    for task in results:
-        print(f"{task}: {results[task]} / {tot_tasks[task]}")
+    if create_plan_tsne:
+        create_tsne(plans, eval_log_dir, epoch)
+    print_and_save(results, eval_sequences, eval_log_dir, epoch)
 
-    print(f"SR: {sum(results.values()) / sum(tot_tasks.values()) * 100:.1f}%")
+    return results
 
-    # Save results
-    with open(os.path.join(args.eval_folder, f"results_{args.test_on}.txt"), "w") as f:
-        for task in results:
-            f.write(f"{task}: {results[task]} / {tot_tasks[task]}\n")
-        f.write(f"SR: {sum(results.values()) / sum(tot_tasks.values()) * 100:.1f}%\n")
+
+def evaluate_sequence(
+    env,
+    model,
+    task_checker,
+    initial_state,
+    eval_sequence,
+    val_annotations,
+    plans,
+    debug,
+    debug_path,
+):
+    """
+    Evaluates a sequence of language instructions.
+    """
+    robot_obs, scene_obs = get_env_state_for_initial_condition(initial_state)
+    env.reset(robot_obs=robot_obs, scene_obs=scene_obs)
+
+    success_counter = 0
+    if debug:
+        time.sleep(1)
+        print()
+        print()
+        print(f"Evaluating sequence: {' -> '.join(eval_sequence)}")
+        print("Subtask: ", end="")
+    for subtask in eval_sequence:
+        success, length = rollout(
+            env, model, task_checker, subtask, val_annotations, plans, debug, debug_path
+        )
+        if success:
+            success_counter += 1
+        else:
+            return success_counter
+    return success_counter
 
 
 def save_gif(obs_list, save_path, duration=0.2):
@@ -347,44 +456,57 @@ def save_gif(obs_list, save_path, duration=0.2):
 def rollout(
     env,
     model,
-    episode,
     task_oracle,
-    args,
-    task,
+    subtask,
     val_annotations,
+    plans,
+    debug,
+    debug_path=None,
 ):
-    # state_obs, rgb_obs, depth_obs = episode["robot_obs"], episode["rgb_obs"], episode["depth_obs"]
-    reset_info = episode["state_info"]
-    # idx = episode["idx"]
-    obs = env.reset(
-        robot_obs=reset_info["robot_obs"][0], scene_obs=reset_info["scene_obs"][0]
-    )
+    """
+    Run the actual rollout on one subtask (which is one natural language instruction).
+    """
+    if debug:
+        print(f"{subtask} ", end="")
+        time.sleep(0.5)
+    obs = env.get_obs()
     # get lang annotation for subtask
-    # lang_annotation = val_annotations[task][0]
-    lang_annotation = episode["lang"]
-
+    lang_annotation = val_annotations[subtask][0]
     model.reset()
     start_info = env.get_info()
+
     obs_list = []
-    for step in range(args.ep_len):
-        # action = episode["actions"][step]
-        action = model.step(obs, lang_annotation, episode)
+    for step in range(EP_LEN):
+        action = model.step(obs, lang_annotation)
         obs, _, _, current_info = env.step(action)
-        if args.save_failures:
+        if debug_path:
             obs_list.append(obs["rgb_obs"]["rgb_static"][0, 0])
-        # Check if current step solves a task
+
+        if debug:
+            img = env.render(mode="rgb_array")
+            join_vis_lang(img, lang_annotation)
+            # time.sleep(0.1)
+        if step == 0:
+            # for tsne plot, only if available
+            collect_plan(model, plans, subtask)
+
+        # check if current step solves a task
         current_task_info = task_oracle.get_task_info_for_set(
-            start_info, current_info, {task.replace(" ", "_")}
+            start_info, current_info, {subtask}
         )
         if len(current_task_info) > 0:
-            print(colored("S", "green"), end=" ")
+            if debug:
+                print(colored("success", "green"), end=" ")
             return True, step
-    print(colored("F", "red"), end=" ")
-    if args.save_failures:
+    if debug:
+        print(colored("fail", "red"), end=" ")
+
+    if debug_path:
         # Create folder for this failed episode
-        os.makedirs(args.debug_path, exist_ok=True)
+        os.makedirs(debug_path, exist_ok=True)
+        failure_idx = len(os.listdir(debug_path))
         failed_episode_path = os.path.join(
-            args.debug_path, f"failed_{task.replace(' ', '_')}_{episode['idx']}"
+            debug_path, f"failed_{subtask.replace(' ', '_')}_{failure_idx}"
         )
         os.makedirs(
             failed_episode_path,
@@ -407,16 +529,29 @@ def rollout(
             (model.sub_goals[0] + 1) / 2,
             os.path.join(
                 failed_episode_path,
-                "subgoals.png",
+                f"subgoals_{model.steps // model.ref_traj_length}.png",
             ),
         )
     return False, step
 
 
-if __name__ == "__main__":
-    seed_everything(0, workers=True)
+def main():
+    seed_everything(0, workers=True)  # type:ignore
     parser = argparse.ArgumentParser(
         description="Evaluate a trained model on multistep sequences with language goals."
+    )
+    parser.add_argument(
+        "--dataset_path",
+        type=str,
+        help="Path to the dataset root directory.",
+        default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+    )
+
+    parser.add_argument(
+        "--eval_log_dir",
+        type=str,
+        help="Where to log the evaluation results.",
+        default="eval",
     )
 
     parser.add_argument(
@@ -448,13 +583,6 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--test_on",
-        type=str,
-        help="Train on train or val",
-        default="train",
-    )
-
-    parser.add_argument(
         "--server",
         "-s",
         type=str,
@@ -477,30 +605,23 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--num_subgoals",
-        type=int,
-        default=8,
-        help="Number of subgoals to generate.",
-    )
-
-    parser.add_argument(
-        "--save_failures",
+        "--debug_model",
         action="store_true",
-        help="Save failed episodes.",
+        help="Print debug info and visualize environment.",
     )
 
     parser.add_argument(
         "--debug_path",
         type=str,
-        default="/home/grislain/AVDC/debug",
         help="Path to save debug images.",
+        default="/home/grislain/AVDC/debug_sequential",
     )
 
     parser.add_argument(
-        "--eval_folder",
-        type=str,
-        default="eval",
-        help="Folder to save evaluation results.",
+        "--num_subgoals",
+        type=int,
+        help="Number of subgoals to generate.",
+        default=8,
     )
 
     parser.add_argument(
@@ -543,9 +664,9 @@ if __name__ == "__main__":
     print("Config:\n" + OmegaConf.to_yaml(config))
 
     # Save config
-    os.makedirs(args.eval_folder, exist_ok=True)
+    os.makedirs(args.eval_log_dir, exist_ok=True)
     with open(
-        os.path.join(args.eval_folder, "config.yaml"),
+        os.path.join(args.eval_log_dir, "config.yaml"),
         "w",
     ) as f:
         OmegaConf.save(config, f)
@@ -593,18 +714,11 @@ if __name__ == "__main__":
     )
     data_module.setup()
 
-    if args.test_on == "train":
-        dataloader = data_module.train_dataloader()
-        high_level_dataset = dataloader["lang"].dataset
-    elif args.test_on == "val":
-        dataloader = data_module.val_dataloader()
-        high_level_dataset = dataloader.dataset.datasets["lang"]
-    else:
-        raise ValueError("Invalid test_on argument")
+    dataloader = data_module.val_dataloader()
+    high_level_dataset = dataloader.dataset.datasets["lang"]
 
     device = torch.device("cuda:0")
     config.device = "cuda"
-    checkpoint = "None"
 
     if args.debug:
         # Create debug folder
@@ -616,5 +730,8 @@ if __name__ == "__main__":
         rollout_cfg.env_cfg, high_level_dataset, device, show_gui=False
     )
     model = CustomModel(config)
+    evaluate_policy(model, env, debug=args.debug, debug_path=args.debug_path)
 
-    evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
+
+if __name__ == "__main__":
+    main()
