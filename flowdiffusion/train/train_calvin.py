@@ -85,6 +85,7 @@ def main(args):
             "train_num_steps": args.train_num_steps,
             "save_and_sample_every": args.save_and_sample_every,
             "diffusion_objective": args.diff_objective,
+            "min_batch_size": args.min_batch_size,
         }
     )
 
@@ -241,7 +242,9 @@ def main(args):
         ema_decay=0.999,
         train_batch_size=cfg.datamodule.lang_dataset.batch_size,
         valid_batch_size=1,
-        gradient_accumulate_every=max(1, 16 // cfg.datamodule.lang_dataset.batch_size),
+        gradient_accumulate_every=max(
+            1, args.min_batch_size // cfg.datamodule.lang_dataset.batch_size
+        ),
         num_samples=valid_n,
         results_folder=results_folder,
         fp16=True,
@@ -503,6 +506,9 @@ if __name__ == "__main__":
     )  # set to number of training steps
     parser.add_argument(
         "--batch_size", type=int, default=16
+    )  # set to batch size for training
+    parser.add_argument(
+        "--min_batch_size", type=int, default=8
     )  # set to batch size for training
     parser.add_argument(
         "--save_and_sample_every", type=int, default=2500
