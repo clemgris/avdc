@@ -21,6 +21,7 @@ from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
 from transformers import CLIPTextModel, CLIPTokenizer
 from unet import UnetMW as Unet
+from vis_features import pca_project_features
 
 sys.path.append(
     os.path.join(
@@ -41,6 +42,9 @@ device = "cuda:0" if torch.cuda.is_available() else "cpu"
 def main(args):
     results_folder = args.results_folder
     data_path = args.data_path
+
+    if args.diffuse_on == "dino_vit":
+        diffuse_on = f"dino_vit_{args.feat_patch_size}"
 
     cfg = DictConfig(
         {
@@ -71,8 +75,9 @@ def main(args):
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
-                    "diffuse_on": args.diffuse_on,
+                    "diffuse_on": diffuse_on,
                     "norm_dino_feat": args.norm,
+                    "feat_patch_size": args.feat_patch_size,
                 },
             },
             "train_num_steps": args.train_num_steps,
@@ -86,7 +91,7 @@ def main(args):
     sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
     if "dino" in cfg.datamodule.lang_dataset.diffuse_on:
-        target_size = (16, 16)
+        target_size = (args.feat_patch_size, args.feat_patch_size)
         channel = 768
     elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
         target_size = (96, 96)
@@ -112,15 +117,21 @@ def main(args):
 
     if args.mode == "train":
         if os.path.exists(results_folder):
-            if not args.override:
+            if not args.override and args.checkpoint_num is None:
                 raise ValueError(
                     f"Results folder {results_folder} already exists. Use --override to overwrite."
                 )
         results_folder.mkdir(exist_ok=True, parents=True)
         print("Results folder:", results_folder)
 
-    with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
-        file.write(OmegaConf.to_yaml(cfg))
+    if args.checkpoint_num is None:
+        with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
+            file.write(OmegaConf.to_yaml(cfg))
+    else:
+        # Load checkpoint config
+        with open(os.path.join(results_folder, "data_config.yaml"), "r") as file:
+            checkpoint_cfg = OmegaConf.load(file)
+        assert checkpoint_cfg == cfg, "Checkpoint config does not match current config."
 
     if args.mode == "inference":
         train_set = valid_set = [None]  # dummy
@@ -155,7 +166,12 @@ def main(args):
     if args.diffuse_on == "pixel":
         channel_mult = (1, 2, 3, 4, 5)
     elif "dino" in args.diffuse_on:
-        channel_mult = (1, 2, 3)
+        if args.feat_patch_size == 16:
+            channel_mult = (1, 2, 3)
+        elif args.feat_patch_size == 32:
+            channel_mult = (1, 2, 3, 4)
+        elif args.feat_patch_size == 64:
+            channel_mult = (1, 2, 3, 4, 5)
     unet = Unet(channel, channel_mult=channel_mult)
 
     if args.server == "jz":
@@ -171,15 +187,14 @@ def main(args):
     text_encoder.eval()
 
     decoder_weigth_path = args.feature_decoder_checkpoint_path
-
-    if "dino" in cfg.datamodule.lang_dataset.diffuse_on:
+    if args.feature_decoder_checkpoint_path is not None:
         import torch
         from decoder import TransposedConvDecoder
 
         decoder_model = TransposedConvDecoder(
             emb_dim=768,
             observation_shape=(3, 96, 96),
-            patch_size=16,
+            patch_size=args.feat_patch_size,
         )
         state_dict = torch.load(decoder_weigth_path)
         state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
@@ -356,7 +371,12 @@ def main(args):
                         dino_stats["max"] - dino_stats["min"]
                     )
                     init_feat = init_feat * 2 - 1
-            init_feat = rearrange(init_feat, "b (h w) c -> b c h w ", w=16, h=16)
+            init_feat = rearrange(
+                init_feat,
+                "b (h w) c -> b c h w ",
+                w=args.feat_patch_size,
+                h=args.feat_patch_size,
+            )
             for i in range(args.num_samples):
                 output = trainer.sample(
                     init_feat, [text], batch_size, guidance_weight
@@ -364,8 +384,8 @@ def main(args):
                 output = rearrange(
                     output,
                     "b (n c) h w -> b n (h w) c",
-                    w=16,
-                    h=16,
+                    w=args.feat_patch_size,
+                    h=args.feat_patch_size,
                     n=(sample_per_seq - 1),
                 )
                 # Unnormalize
@@ -382,8 +402,10 @@ def main(args):
                             output * (dino_stats["max"] - dino_stats["min"])
                             + dino_stats["min"]
                         )
-
-                output = trainer.feature_decoder(output.to(device)).detach().cpu()
+                if trainer.feature_decoder is not None:
+                    output = trainer.feature_decoder(output.to(device)).detach().cpu()
+                else:
+                    output = pca_project_features(output)
 
                 # Save output
                 output = torch.cat([image[None], output], dim=0)
@@ -449,6 +471,9 @@ if __name__ == "__main__":
         "--diffuse_on", type=str, default="pixel", choices=["pixel", "dino", "dino_vit"]
     )  # set to 'pixel' or 'dino_feat' to diffuse on pixel or dino features
     parser.add_argument(
+        "--feat_patch_size", type=int, default=16
+    )  # set to patch size for dino features
+    parser.add_argument(
         "--num_subgoals", type=int, default=8
     )  # set to number of subgoals
     parser.add_argument(
@@ -457,7 +482,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--feature_decoder_checkpoint_path",
         type=str,
-        default="/home/grislain/AVDC/calvin/models/decoder/decoder_model_48.pth",
+        default=None,  # "/home/grislain/AVDC/calvin/models/decoder/decoder_model_48.pth",
     )  # set to decoder checkpoint path
     parser.add_argument(
         "--data_path",
@@ -483,9 +508,6 @@ if __name__ == "__main__":
         "--norm", type=str, default=None, choices=[None, "l2", "z_score", "min_max"]
     )  # set to normalisation type for features
     args = parser.parse_args()
-
-    if args.diffuse_on == "diffuse_on":
-        assert args.feature_decoder_checkpoint_path is not None
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None

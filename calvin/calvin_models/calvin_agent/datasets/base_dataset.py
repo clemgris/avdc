@@ -76,7 +76,9 @@ class BaseDataset(Dataset):
         aux_lang_loss_window: int = 1,
         diffuse_on: str = "pixel",
         norm_dino_feat: bool = False,
+        feat_patch_size: int = 16,
     ):
+        self.feat_patch_size = feat_patch_size
         self.observation_space = obs_space
         self.proprio_state = proprio_state
         self.transforms = transforms
@@ -126,12 +128,22 @@ class BaseDataset(Dataset):
         if self.with_dino_feat:
             x_cond = dino_features[0][None, ...]
             x_cond = rearrange(x_cond, "f wh c -> f c wh")
-            x_cond = rearrange(x_cond, "f c (w h) -> f c w h", w=16, h=16)
+            x_cond = rearrange(
+                x_cond,
+                "f c (w h) -> f c w h",
+                w=self.feat_patch_size,
+                h=self.feat_patch_size,
+            )
             x_cond = x_cond.squeeze(0)
 
             x = dino_features[1:].squeeze(1)
             x = rearrange(x, "f wh c -> f c wh")
-            x = rearrange(x, "f c (w h) -> f c w h", w=16, h=16)
+            x = rearrange(
+                x,
+                "f c (w h) -> f c w h",
+                w=self.feat_patch_size,
+                h=self.feat_patch_size,
+            )
             x = rearrange(x, "f c h w -> (f c) h w")
         else:
             x_cond = images[0, ...]

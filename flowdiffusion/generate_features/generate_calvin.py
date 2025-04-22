@@ -64,6 +64,7 @@ def main(args):
                     "num_workers": 2,
                 },
             },
+            "patch_size": args.patch_size,
         }
     )
 
@@ -84,13 +85,38 @@ def main(args):
             )
         )
 
+    if "dino" in args.features:
+        for section in ["train", "val"]:
+            if hasattr(transforms, section) and hasattr(
+                transforms[section], "rgb_static"
+            ):
+                for transform in transforms[section].rgb_static:
+                    if (
+                        "_target_" in transform
+                        and transform["_target_"] == "torchvision.transforms.Resize"
+                    ):
+                        print(f"Resize {section} to", args.patch_size * 14)
+                        transform["size"] = args.patch_size * 14
+                    elif (
+                        "_target_" in transform
+                        and transform["_target_"] == "torchvision.transforms.CenterCrop"
+                    ):
+                        print(f"CenterCrop {section} to", args.patch_size * 14)
+                        transform["size"] = args.patch_size * 14
+
     os.makedirs(
-        os.path.join(cfg.root, f"training/features_{args.features}"), exist_ok=True
+        os.path.join(cfg.root, f"training/features_{args.features}_{args.patch_size}"),
+        exist_ok=True,
     )
     os.makedirs(
-        os.path.join(cfg.root, f"validation/features_{args.features}"), exist_ok=True
+        os.path.join(
+            cfg.root, f"validation/features_{args.features}_{args.patch_size}"
+        ),
+        exist_ok=True,
     )
-    with open(os.path.join(cfg.root, "dino_feat_config.yaml"), "w") as file:
+    with open(
+        os.path.join(cfg.root, f"{args.features}_{args.patch_size}_config.yaml"), "w"
+    ) as file:
         file.write(OmegaConf.to_yaml(cfg))
 
     data_module = CalvinDataModule(
@@ -148,10 +174,10 @@ def main(args):
         raise ValueError(f"Unknown feature type {args.features}")
 
     # Init stats
-    sum = torch.zeros((256, 768))
-    sum_squared = torch.zeros((256, 768))
-    min = torch.ones((256, 768)) * 1e10
-    max = torch.ones((256, 768)) * -1e10
+    sum = torch.zeros((args.patch_size**2, 768))
+    sum_squared = torch.zeros((args.patch_size**2, 768))
+    min = torch.ones((args.patch_size**2, 768)) * 1e10
+    max = torch.ones((args.patch_size**2, 768)) * -1e10
 
     for data in tqdm(
         train_loader, desc=f"Generate {args.features} features of training data"
@@ -159,7 +185,6 @@ def main(args):
         frame_idx, image, _ = data
         _, patch_emb = encoder_model(image.to("cuda"))
         patch_emb = patch_emb.cpu()
-        breakpoint()
 
         for i in range(len(frame_idx)):
             all_emb = {}
@@ -169,7 +194,7 @@ def main(args):
             # Save as npz
             np.savez(
                 Path(cfg.root)
-                / f"training/features_{args.features}/features_{all_emb['frame_idx']}.npz",
+                / f"training/features_{args.features}_{args.patch_size}/features_{all_emb['frame_idx']}.npz",
                 **all_emb,
             )
 
@@ -180,7 +205,8 @@ def main(args):
             sum_squared += patch_emb[i] ** 2
 
     print(
-        "Training features saved in ", cfg.root + f"/training/features_{args.features}"
+        "Training features saved in ",
+        cfg.root + f"/training/features_{args.features}_{args.patch_size}",
     )
 
     # Save stats
@@ -212,13 +238,13 @@ def main(args):
             # save as npz
             np.savez(
                 Path(cfg.root)
-                / f"validation/features_{args.features}/features_{eval_emb['frame_idx']}.npz",
+                / f"validation/features_{args.features}_{args.patch_size}/features_{eval_emb['frame_idx']}.npz",
                 **eval_emb,
             )
 
     print(
         "Validation features saved in ",
-        cfg.root + f"/validation/features_{args.features}",
+        cfg.root + f"/validation/features_{args.features}_{args.patch_size}",
     )
 
 
@@ -240,5 +266,8 @@ if __name__ == "__main__":
         "-b", "--batch_size", type=int, default=32
     )  # batch size for dataloader
     parser.add_argument("-f", "--features", type=str, default="dino_vit")
+    parser.add_argument(
+        "-p", "--patch_size", type=int, default=16
+    )  # patch size for encoder model
     args = parser.parse_args()
     main(args)
