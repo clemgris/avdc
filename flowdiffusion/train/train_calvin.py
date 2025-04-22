@@ -133,6 +133,13 @@ def main(args):
         # Load checkpoint config
         with open(os.path.join(results_folder, "data_config.yaml"), "r") as file:
             checkpoint_cfg = OmegaConf.load(file)
+        for key in cfg.keys():
+            if key not in checkpoint_cfg:
+                print(f"Key {key} not in checkpoint config.")
+            elif cfg[key] != checkpoint_cfg[key]:
+                print(
+                    f"Key {key} has different value in checkpoint config {checkpoint_cfg[key]} != {cfg[key]}"
+                )
         assert checkpoint_cfg == cfg, "Checkpoint config does not match current config."
 
     if args.mode == "inference":
