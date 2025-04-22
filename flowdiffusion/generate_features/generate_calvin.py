@@ -220,8 +220,13 @@ def main(args):
     stats["dino_features"]["max"] = max
 
     # Save in root directory with pickle
-    torch.save(stats, os.path.join(cfg.root, f"{args.features}_stats.pt"))
-    print("Stats saved in", os.path.join(cfg.root, f"{args.features}_stats.pt"))
+    torch.save(
+        stats, os.path.join(cfg.root, f"{args.features}_{args.patch_size}_stats.pt")
+    )
+    print(
+        "Stats saved in",
+        os.path.join(cfg.root, f"{args.features}_{args.patch_size}_stats.pt"),
+    )
 
     for data in tqdm(
         valid_loader, desc=f"Generate {args.features} features of validation data"
