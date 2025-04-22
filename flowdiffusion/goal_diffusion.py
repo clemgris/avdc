@@ -18,6 +18,7 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, Subset
 from torchvision import utils
 from tqdm.auto import tqdm
+from vis_features import pca_project_features
 
 __version__ = "0.0"
 
@@ -1161,9 +1162,6 @@ class Trainer(object):
                                 gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
                             if self.in_channels > 3:
-                                assert self.feature_decoder is not None
-                                assert self.features_stats is not None
-
                                 gt_img = rearrange(
                                     gt_img,
                                     "(b n) c h w -> (b n) (h w) c ",
@@ -1192,7 +1190,11 @@ class Trainer(object):
                                             + self.features_stats["min"]
                                         )
                                 # Decode features into image
-                                gt_img = self.feature_decoder(gt_img.to(device))
+
+                                if self.feature_decoder:
+                                    gt_img = self.feature_decoder(gt_img.to(device))
+                                else:
+                                    gt_img = pca_project_features(gt_img.to(device))
                             else:
                                 # Unormalise
                                 gt_img = (gt_img + 1) / 2
@@ -1215,9 +1217,6 @@ class Trainer(object):
                             pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
                         if self.in_channels > 3:
-                            assert self.feature_decoder is not None
-                            assert self.features_stats is not None
-
                             pred_img = rearrange(
                                 pred_img, "(b n) c h w -> (b n) (h w) c ", n=n_rows + 1
                             )
@@ -1244,7 +1243,10 @@ class Trainer(object):
                                         + self.features_stats["min"]
                                     )
                             # Decode features into image
-                            pred_img = self.feature_decoder(pred_img.to(device))
+                            if self.feature_decoder:
+                                pred_img = self.feature_decoder(pred_img.to(device))
+                            else:
+                                pred_img = pca_project_features(pred_img.to(device))
                         else:
                             # Unormalise
                             pred_img = (pred_img + 1) / 2
