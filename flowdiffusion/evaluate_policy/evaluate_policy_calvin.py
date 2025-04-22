@@ -1,7 +1,6 @@
 import argparse
 import logging
 import os
-import pickle
 import sys
 from collections import Counter
 from distutils.util import strtobool
@@ -56,7 +55,15 @@ class CustomModel(CalvinBaseModel):
         self.debug_path = cfg.debug_path
 
         # Low level
-        self.stats = pickle.load(open(self.cfg.policy.stats_path, "rb"))
+        stats_path = os.path.join(data_path, "training/statistics.yaml")
+        train_stats = OmegaConf.load(stats_path)
+
+        self.stats = {
+            "action": {
+                "max": torch.Tensor(train_stats.act_max_bound),
+                "min": torch.Tensor(train_stats.act_min_bound),
+            }
+        }
 
         self.steps = 0
         self.guidance_weight = 3
