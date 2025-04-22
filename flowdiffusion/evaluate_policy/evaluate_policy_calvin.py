@@ -89,6 +89,9 @@ class CustomModel(CalvinBaseModel):
 
         # High level
 
+        self.replan = cfg.replan
+        self.ref_traj_length = 64
+
         self.use_oracle_subgoals = cfg.high_level.use_oracle_subgoals
         self.sample_subgoals_every = 8
         if not self.use_oracle_subgoals:
@@ -199,7 +202,13 @@ class CustomModel(CalvinBaseModel):
                 )
         else:
             # Generate sequence of subgoals
-            if self.steps == 0:
+            if self.replan:
+                sample_subgoals = self.steps % self.ref_traj_length == 0
+            else:
+                sample_subgoals = self.steps == 0
+
+            if sample_subgoals:
+                print(f"Trial {self.steps // 64}: generating subgoals for {text_goal}")
                 self.sub_goals = (
                     self.high_level.sample(
                         obs_image[0], [text_goal], 1, self.guidance_weight
@@ -214,16 +223,21 @@ class CustomModel(CalvinBaseModel):
                     # Save subgoals
                     self.save_image(
                         self.sub_goals[0],
-                        f"generated_subgoals_{text_goal}.png",
+                        f"generated_subgoals_{text_goal}_{self.steps // self.ref_traj_length}.png",
                     )
 
         if self.steps % self.sample_action_every == 0:
             # Select subgoal
-            sub_gaol_idx = min(
-                self.steps // self.sample_action_every, self.sub_goals.shape[1] - 1
-            )
+            if self.replan:
+                sub_goal_idx = (self.steps // self.sample_action_every) % (
+                    self.sub_goals.shape[1]
+                )
+            else:
+                sub_goal_idx = min(
+                    self.steps // self.sample_action_every, self.sub_goals.shape[1] - 1
+                )
 
-            target = self.sub_goals[0, sub_gaol_idx].to(self.device)
+            target = self.sub_goals[0, sub_goal_idx].to(self.device)
             init = obs["rgb_obs"]["rgb_static"][0, 0]
 
             obs_goal_images = torch.cat([init[None], target[None]], dim=0)
@@ -284,11 +298,12 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
 
     for episode in high_level_dataset:
         task = episode["task"]
-        results[task] += rollout(
+        success, length = rollout(
             env, model, episode, task_oracle, args, task, val_annotations
         )
+        results[task] += success
         tot_tasks[task] += 1
-        print(f"{task}: {results[task]} / {tot_tasks[task]}")
+        print(f"{task}: {results[task]} / {tot_tasks[task]} ({length})")
 
     print("\nResults\n" + "-" * 60)
     for task in results:
@@ -363,7 +378,7 @@ def rollout(
         )
         if len(current_task_info) > 0:
             print(colored("S", "green"), end=" ")
-            return True
+            return True, step
     print(colored("F", "red"), end=" ")
     if args.save_failures:
         # Create folder for this failed episode
@@ -395,7 +410,7 @@ def rollout(
                 "subgoals.png",
             ),
         )
-    return False
+    return False, step
 
 
 if __name__ == "__main__":
@@ -488,6 +503,12 @@ if __name__ == "__main__":
         help="Folder to save evaluation results.",
     )
 
+    parser.add_argument(
+        "--replan",
+        action="store_true",
+        help="Replan subgoals every 64 steps.",
+    )
+
     parser.add_argument("--device", default=0, type=int, help="CUDA device")
     args = parser.parse_args()
 
@@ -515,6 +536,7 @@ if __name__ == "__main__":
             "debug_path": args.debug_path,
             "server": args.server,
             "num_subgoals": args.num_subgoals,
+            "replan": args.replan,
         }
     )
 
