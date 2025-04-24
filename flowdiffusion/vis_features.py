@@ -6,7 +6,7 @@ import PIL.Image as Image
 import torch
 import torchvision.transforms as T
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler, minmax_scale
+from sklearn.preprocessing import StandardScaler
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -14,10 +14,44 @@ sys.path.append(os.path.join(root_path, "flowdiffusion"))
 
 from encoder import ViTEncoder
 
+# def pca_project_features(patch_emb):
+#     """
+#     Projects patch features to 3D using PCA and returns them as an image-like array.
+
+#     Args:
+#         patch_emb (ndarray): Patch embeddings of shape [B, N, D]
+
+#     Returns:
+#         np.ndarray: PCA-projected feature map of shape [B, H, W, 3], values in [0, 1]
+#     """
+#     if isinstance(patch_emb, torch.Tensor):
+#         patch_emb = patch_emb.cpu()
+
+#     img_cnt = patch_emb.shape[0]
+#     patch_h = patch_w = int(np.sqrt(patch_emb.shape[1]))
+
+#     # Flatten and normalize
+#     flat_features = patch_emb.reshape(-1, patch_emb.shape[-1])
+#     flat_features = StandardScaler().fit_transform(flat_features)
+
+#     # PCA projection
+#     pca = PCA(n_components=3)
+#     # projected = pca.fit_transform(flat_features)
+#     # projected = minmax_scale(projected)
+
+#     pca.fit(flat_features[: patch_h * patch_w])
+#     projected = pca.transform(flat_features)
+#     projected = minmax_scale(projected)
+
+#     pca_image = projected.reshape(img_cnt, patch_h, patch_w, 3)
+#     pca_image = torch.tensor(pca_image, dtype=torch.float32).permute(0, 3, 1, 2)
+#     return pca_image
+
 
 def pca_project_features(patch_emb):
     """
     Projects patch features to 3D using PCA and returns them as an image-like array.
+    PCA and StandardScaler are fitted on the first frame, and then applied to the rest of the frames.
 
     Args:
         patch_emb (ndarray): Patch embeddings of shape [B, N, D]
@@ -31,17 +65,32 @@ def pca_project_features(patch_emb):
     img_cnt = patch_emb.shape[0]
     patch_h = patch_w = int(np.sqrt(patch_emb.shape[1]))
 
-    # Flatten and normalize
     flat_features = patch_emb.reshape(-1, patch_emb.shape[-1])
-    flat_features = StandardScaler().fit_transform(flat_features)
+    flat_features_first_frame = flat_features[: patch_h * patch_w]
 
-    # PCA projection
+    scaler = StandardScaler()
+    scaler.fit(flat_features_first_frame)
+
+    flat_features = scaler.transform(flat_features)
+
     pca = PCA(n_components=3)
-    projected = pca.fit_transform(flat_features)
-    projected = minmax_scale(projected)
+    pca.fit(flat_features_first_frame)
+
+    projected = pca.transform(flat_features)
+
+    # Scale the projected features to [0, 1]
+    first_frame_proj = projected[: patch_h * patch_w]
+    min_vals = first_frame_proj.min(axis=0)
+    max_vals = first_frame_proj.max(axis=0)
+    scale = max_vals - min_vals
+    scale[scale == 0] = 1e-5
+
+    projected = (projected - min_vals) / scale
+    projected = np.clip(projected, 0, 1)
 
     pca_image = projected.reshape(img_cnt, patch_h, patch_w, 3)
     pca_image = torch.tensor(pca_image, dtype=torch.float32).permute(0, 3, 1, 2)
+
     return pca_image
 
 
