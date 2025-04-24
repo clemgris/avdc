@@ -1100,6 +1100,11 @@ class Trainer(object):
                 scale = self.accelerator.scaler.get_scale()
 
                 pbar.set_description(f"loss: {total_loss:.4E}, loss scale: {scale:.1E}")
+                # Write loss to file
+                with open(str(self.results_folder / "loss.txt"), "a") as f:
+                    f.write(
+                        f"{self.step} {total_loss:.4E} {scale:.1E} {self.step}/{self.train_num_steps} \n"
+                    )
 
                 accelerator.wait_for_everyone()
 
