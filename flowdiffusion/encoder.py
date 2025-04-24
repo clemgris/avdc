@@ -1,8 +1,13 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
-from transformers import AutoImageProcessor, AutoModel
+from transformers import (
+    AutoImageProcessor,
+    AutoModel,
+)
 from vit_wrapper import PretrainedViTWrapper
+
+# Visual encoder
 
 
 class DinoV2Encoder(nn.Module):
