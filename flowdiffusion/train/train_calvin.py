@@ -19,7 +19,12 @@ sys.path.append(
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import (
+    CLIPTextModel,
+    CLIPTokenizer,
+    T5ForConditionalGeneration,
+    T5Tokenizer,
+)
 from unet import UnetMW as Unet
 from vis_features import pca_project_features
 
@@ -173,6 +178,38 @@ def main(args):
         #     if idx > 10: break
         # breakpoint()
 
+    # Text encoder
+    if args.text_encoder == "CLIP":
+        if args.server == "jz":
+            text_pretrained_model = (
+                "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+            )
+        else:
+            text_pretrained_model = "openai/clip-vit-base-patch32"
+
+        tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
+        text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
+        text_embed_dim = 512
+
+    elif args.text_encoder == "Flan-t5":
+        if args.server == "jz":
+            text_pretrained_model = (
+                "/lustre/fsmisc/dataset/HuggingFace_Models/google/flan-t5-base"
+            )
+        else:
+            text_pretrained_model = "google/flan-t5-base"
+        tokenizer = T5Tokenizer.from_pretrained(text_pretrained_model)
+        model = T5ForConditionalGeneration.from_pretrained(
+            text_pretrained_model, device_map="auto"
+        )
+        text_encoder = model.encoder
+        text_embed_dim = 768
+
+    text_encoder.requires_grad_(False)
+    text_encoder.eval()
+
+    # Diffusion Unet
+
     if args.diffuse_on == "pixel":
         channel_mult = (1, 2, 3, 4, 5)
     elif "dino" in args.diffuse_on:
@@ -182,20 +219,10 @@ def main(args):
             channel_mult = (1, 2, 3, 4)
         elif args.feat_patch_size == 64:
             channel_mult = (1, 2, 3, 4, 5)
-    unet = Unet(channel, channel_mult=channel_mult)
 
-    if args.server == "jz":
-        text_pretrained_model = (
-            "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-        )
-    else:
-        text_pretrained_model = "openai/clip-vit-base-patch32"
+    unet = Unet(channel, channel_mult=channel_mult, text_embed_dim=text_embed_dim)
 
-    tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
-    text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
-    text_encoder.requires_grad_(False)
-    text_encoder.eval()
-
+    # Load decoder checkpoint
     decoder_weigth_path = args.feature_decoder_checkpoint_path
     if args.feature_decoder_checkpoint_path is not None:
         import torch
@@ -522,6 +549,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--norm", type=str, default=None, choices=[None, "l2", "z_score", "min_max"]
     )  # set to normalisation type for features
+    parser.add_argument(
+        "--text_encoder",
+        type=str,
+        default="CLIP",
+        choices=["CLIP", "Flan-t5"],
+    )  # set to text encoder type
     args = parser.parse_args()
     if args.mode == "inference":
         assert args.checkpoint_num is not None

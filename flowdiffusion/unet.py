@@ -38,7 +38,12 @@ class UnetBridge(nn.Module):
 
 
 class UnetMW(nn.Module):
-    def __init__(self, in_channels: int, channel_mult: tuple = (1, 2, 3, 4, 5)):
+    def __init__(
+        self,
+        in_channels: int,
+        channel_mult: tuple = (1, 2, 3, 4, 5),
+        text_embed_dim: int = 512,
+    ):
         super(UnetMW, self).__init__()
         self.in_channels = in_channels
         self.unet = UNetModel(
@@ -54,7 +59,7 @@ class UnetMW(nn.Module):
             dims=3,
             num_classes=None,
             task_tokens=True,
-            task_token_channels=512,
+            task_token_channels=text_embed_dim,
             use_checkpoint=False,
             use_fp16=False,
             num_head_channels=32,
