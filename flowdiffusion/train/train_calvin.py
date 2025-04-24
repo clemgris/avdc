@@ -7,6 +7,8 @@ import torch
 import torch.nn.functional as F
 from einops import rearrange
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
 sys.path.append(
@@ -20,10 +22,10 @@ from goal_diffusion import GoalGaussianDiffusion, Trainer
 from omegaconf import DictConfig, OmegaConf
 from torchvision import utils
 from transformers import (
+    AutoTokenizer,
     CLIPTextModel,
     CLIPTokenizer,
-    T5ForConditionalGeneration,
-    T5Tokenizer,
+    T5EncoderModel,
 )
 from unet import UnetMW as Unet
 from vis_features import pca_project_features
@@ -198,13 +200,15 @@ def main(args):
             )
         else:
             text_pretrained_model = "google/flan-t5-base"
-        tokenizer = T5Tokenizer.from_pretrained(text_pretrained_model)
-        model = T5ForConditionalGeneration.from_pretrained(
-            text_pretrained_model, device_map="auto"
-        )
-        text_encoder = model.encoder
+        # tokenizer = T5Tokenizer.from_pretrained(text_pretrained_model)
+        # model = T5ForConditionalGeneration.from_pretrained(text_pretrained_model)
+        # text_encoder = model.encoder
+
+        text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
+        tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
 
+    text_encoder = text_encoder.to(device)
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
@@ -274,8 +278,8 @@ def main(args):
         ),
         num_samples=valid_n,
         results_folder=results_folder,
-        fp16=True,
-        amp=True,
+        fp16=False,  # True,
+        amp=False,  # True,
         calculate_fid=False,
         dino_stats_path=os.path.join(cfg.root, "dino_stats.pt"),
         norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
