@@ -875,8 +875,7 @@ class Trainer(object):
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
 
-        # accelerator
-
+        # Accelerator
         self.accelerator = Accelerator(
             split_batches=split_batches, mixed_precision="fp16" if fp16 else "no"
         )
@@ -886,8 +885,7 @@ class Trainer(object):
 
         self.accelerator.native_amp = amp
 
-        # model
-
+        # Model
         self.model = diffusion_model
         self.num_params = sum(
             p.numel() for p in self.model.parameters() if p.requires_grad
@@ -981,8 +979,7 @@ class Trainer(object):
 
         self.step = 0
 
-        # prepare model, dataloader, optimizer with accelerator
-
+        # Prepare model, dataloader, optimizer with accelerator
         self.model, self.opt, self.text_encoder = self.accelerator.prepare(
             self.model, self.opt, self.text_encoder
         )
