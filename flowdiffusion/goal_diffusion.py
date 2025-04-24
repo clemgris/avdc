@@ -1094,7 +1094,10 @@ class Trainer(object):
 
                 accelerator.clip_grad_norm_(self.model.parameters(), 1.0)
 
-                scale = self.accelerator.scaler.get_scale()
+                if self.accelerator.scaler is not None:
+                    scale = self.accelerator.scaler.get_scale()
+                else:
+                    scale = 1.0
 
                 pbar.set_description(f"loss: {total_loss:.4E}, loss scale: {scale:.1E}")
                 # Write loss to file
