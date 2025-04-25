@@ -859,7 +859,7 @@ class Trainer(object):
         num_samples=3,
         results_folder="./results",
         amp=True,
-        fp16=True,
+        bf16=True,
         split_batches=True,
         convert_image_to=None,
         calculate_fid=True,
@@ -877,7 +877,7 @@ class Trainer(object):
 
         # Accelerator
         self.accelerator = Accelerator(
-            split_batches=split_batches, mixed_precision="fp16" if fp16 else "no"
+            split_batches=split_batches, mixed_precision="bf16" if bf16 else "no"
         )
 
         if self.accelerator.is_main_process:
