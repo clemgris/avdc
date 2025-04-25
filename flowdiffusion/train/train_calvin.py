@@ -212,6 +212,11 @@ def main(args):
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
+    text_encoder_num_params = sum(p.numel() for p in text_encoder.parameters())
+    print(
+        f"Number of parameters in text encoder {text_pretrained_model}: {text_encoder_num_params / 1e6:.2f}M"
+    )
+
     # Diffusion Unet
 
     if args.diffuse_on == "pixel":
