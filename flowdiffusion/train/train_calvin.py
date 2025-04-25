@@ -25,6 +25,8 @@ from transformers import (
     AutoTokenizer,
     CLIPTextModel,
     CLIPTokenizer,
+    SiglipTextModel,
+    SiglipTokenizer,
     T5EncoderModel,
 )
 from unet import UnetMW as Unet
@@ -202,12 +204,16 @@ def main(args):
             )
         else:
             text_pretrained_model = "google/flan-t5-base"
-        # tokenizer = T5Tokenizer.from_pretrained(text_pretrained_model)
-        # model = T5ForConditionalGeneration.from_pretrained(text_pretrained_model)
-        # text_encoder = model.encoder
-
         text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
         tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
+        text_embed_dim = 768
+    elif args.text_encoder == "Siglip":
+        if args.server == "jz":
+            text_pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/google/siglip-base-patch16-224"
+        else:
+            text_pretrained_model = "google/siglip-base-patch16-224"
+        tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
+        text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
 
     text_encoder = text_encoder.to(device)
@@ -565,7 +571,7 @@ if __name__ == "__main__":
         "--text_encoder",
         type=str,
         default="CLIP",
-        choices=["CLIP", "Flan-t5"],
+        choices=["CLIP", "Flan-t5", "Siglip"],
     )  # set to text encoder type
     args = parser.parse_args()
     if args.mode == "inference":
