@@ -1068,6 +1068,13 @@ class Trainer(object):
             disable=not accelerator.is_main_process,
         ) as pbar:
             while self.step < self.train_num_steps:
+                # Shuffle the dataset (useful when using distributed training)
+                if self.step % len(self.dl._loader) == 0:
+                    epoch = self.step // len(self.dl._loader)
+                    if hasattr(self.dl._loader.sampler, "set_epoch"):
+                        self.dl._loader.sampler.set_epoch(epoch)
+
+                # Training step
                 total_loss = 0.0
 
                 for _ in range(self.gradient_accumulate_every):
