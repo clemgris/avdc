@@ -197,6 +197,7 @@ def main(args):
         text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
         text_embed_dim = 512
         amp = True
+        precision = "fp16"
 
     elif args.text_encoder == "Flan-t5":
         if args.server == "jz":
@@ -209,6 +210,7 @@ def main(args):
         tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
         amp = True
+        precision = "bf16"
 
     elif args.text_encoder == "Siglip":
         if args.server == "jz":
@@ -219,6 +221,7 @@ def main(args):
         text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
         amp = True
+        precision = "fp16"
 
     text_encoder = text_encoder.to(device)
     text_encoder.requires_grad_(False)
@@ -296,7 +299,7 @@ def main(args):
         ),
         num_samples=valid_n,
         results_folder=results_folder,
-        bf16=amp,
+        precision=precision,
         amp=amp,
         calculate_fid=False,
         dino_stats_path=os.path.join(cfg.root, "dino_stats.pt"),
