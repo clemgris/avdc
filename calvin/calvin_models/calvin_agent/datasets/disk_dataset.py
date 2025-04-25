@@ -725,14 +725,23 @@ class DiskActionDataset(BaseDataset):
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
 
-        start_image = sequence["rgb_obs"]["rgb_static"][0]
+        if "rgb_gripper" in sequence["rgb_obs"].keys():
+            start_image = torch.stack(
+                [
+                    sequence["rgb_obs"]["rgb_gripper"][0],
+                    sequence["rgb_obs"]["rgb_static"][0],
+                ]
+            )
+        else:
+            start_image = sequence["rgb_obs"]["rgb_static"]
+
         actions = sequence["actions"][:-1]
         end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
             sequence["rgb_obs"]["rgb_static"][-1]
-        )
+        )[None]
         # Stack start and end images
-        start_end_images = torch.stack([start_image, end_image])
-        state = torch.zeros((2, 0))
+        start_end_images = torch.cat([start_image, end_image], dim=0)
+        state = torch.zeros((start_end_images.shape[0], 0))
         action_is_pad = torch.zeros_like(actions)
 
         res = {

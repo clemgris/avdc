@@ -69,7 +69,9 @@ def main(args):
                         "normalize_robot_orientation": True,
                     },
                     "obs_space": {
-                        "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
+                        "rgb_obs": ["rgb_static"]
+                        if not args.use_ego_obs
+                        else ["rgb_static", "rgb_gripper"],
                         "depth_obs": [],
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
@@ -118,9 +120,11 @@ def main(args):
     device = torch.device("cuda")
     log_freq = 10
 
+    n_obs_steps = len(cfg.datamodule[dataset_name]["obs_space"]["rgb_obs"]) + 1
+
     diff_cfg = DictConfig(
         {
-            "n_obs_steps": 2,
+            "n_obs_steps": n_obs_steps,
             "horizon": int(
                 np.ceil(
                     cfg.datamodule[dataset_name]["max_window_size"]
@@ -238,9 +242,12 @@ if __name__ == "__main__":
     )  # set to number of subgoals
     parser.add_argument(
         "--train_on", type=str, default="lang"
-    )  # set to train on language labelled dataset (1% "lang") or full dataset (100% "vis")
+    )  # set to train on language labelled dataset (38% "lang") or full dataset (100% "vis")
     parser.add_argument(
         "--data_aug_prob", type=float, default=0.0
     )  # set to probability of data augmentation (0.0 for no augmentation)
+    parser.add_argument(
+        "--use_ego_obs", type=bool, default=False
+    )  # set to True to use ego observations
     args = parser.parse_args()
     main(args)

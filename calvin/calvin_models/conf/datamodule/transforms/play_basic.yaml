@@ -11,7 +11,7 @@ train:
       std: [0.01]
   rgb_gripper:
     - _target_: torchvision.transforms.Resize
-      size: 84
+      size: 96
     - _target_: calvin_agent.utils.transforms.ScaleImageTensor
     - _target_: torchvision.transforms.Normalize
       mean: [0.5,]
@@ -79,7 +79,7 @@ val:
       std: [0.5,]
   rgb_gripper:
     - _target_: torchvision.transforms.Resize
-      size: 84
+      size: 96
     - _target_: calvin_agent.utils.transforms.ScaleImageTensor
     - _target_: torchvision.transforms.Normalize
       mean: [0.5,]
