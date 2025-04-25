@@ -42,7 +42,8 @@ from calvin.calvin_models.calvin_agent.datasets.calvin_data_module import (
 )
 
 print(f"CUDA available: {torch.cuda.is_available()}")
-print(f"Total GPUs available: {torch.cuda.device_count()}")
+num_gpus = torch.cuda.device_count()
+print(f"Total GPUs available: {num_gpus}")
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 
@@ -63,7 +64,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskDiffusionDataset",
                     "key": "lang",
                     "save_format": "npz",
-                    "batch_size": args.batch_size,
+                    "batch_size": args.batch_size // num_gpus,
                     "min_window_size": 16,
                     "max_window_size": 65,
                     "proprio_state": {
@@ -93,6 +94,7 @@ def main(args):
             "save_and_sample_every": args.save_and_sample_every,
             "diffusion_objective": args.diff_objective,
             "min_batch_size": args.min_batch_size,
+            "global_batch_size": args.batch_size,
         }
     )
 
@@ -279,7 +281,8 @@ def main(args):
         train_batch_size=cfg.datamodule.lang_dataset.batch_size,
         valid_batch_size=1,
         gradient_accumulate_every=max(
-            1, args.min_batch_size // cfg.datamodule.lang_dataset.batch_size
+            1,
+            args.min_batch_size // (cfg.datamodule.lang_dataset.batch_size * num_gpus),
         ),
         num_samples=valid_n,
         results_folder=results_folder,
