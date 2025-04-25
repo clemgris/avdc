@@ -196,6 +196,7 @@ def main(args):
         tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
         text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
         text_embed_dim = 512
+        amp = True
 
     elif args.text_encoder == "Flan-t5":
         if args.server == "jz":
@@ -207,6 +208,8 @@ def main(args):
         text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
         tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
+        amp = False
+
     elif args.text_encoder == "Siglip":
         if args.server == "jz":
             text_pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/google/siglip-base-patch16-224"
@@ -215,6 +218,7 @@ def main(args):
         tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
         text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
+        amp = True
 
     text_encoder = text_encoder.to(device)
     text_encoder.requires_grad_(False)
@@ -292,8 +296,8 @@ def main(args):
         ),
         num_samples=valid_n,
         results_folder=results_folder,
-        fp16=False,  # True,
-        amp=False,  # True,
+        fp16=amp,
+        amp=amp,
         calculate_fid=False,
         dino_stats_path=os.path.join(cfg.root, "dino_stats.pt"),
         norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
