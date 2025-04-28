@@ -209,8 +209,8 @@ def main(args):
         text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
         tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
         text_embed_dim = 768
-        amp = True
-        precision = "bf16"
+        amp = False
+        precision = "no"
 
     elif args.text_encoder == "Siglip":
         if args.server == "jz":
