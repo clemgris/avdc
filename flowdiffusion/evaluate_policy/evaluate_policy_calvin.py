@@ -147,7 +147,7 @@ class CustomModel(CalvinBaseModel):
                 gradient_accumulate_every=1,
                 num_samples=1,
                 results_folder=self.cfg.high_level.results_folder,
-                fp16=True,
+                precision="fp16",
                 amp=True,
                 calculate_fid=False,
                 feature_decoder=feature_decoder,
@@ -208,7 +208,9 @@ class CustomModel(CalvinBaseModel):
                 sample_subgoals = self.steps == 0
 
             if sample_subgoals:
-                print(f"Trial {self.steps // 64}: generating subgoals for {text_goal}")
+                print(
+                    f"Trial {self.steps // 64}: generating subgoals for '{text_goal}'"
+                )
                 self.sub_goals = (
                     self.high_level.sample(
                         obs_image[0], [text_goal], 1, self.guidance_weight
@@ -237,10 +239,25 @@ class CustomModel(CalvinBaseModel):
                     self.steps // self.sample_action_every, self.sub_goals.shape[1] - 1
                 )
 
-            target = self.sub_goals[0, sub_goal_idx].to(self.device)
-            init = obs["rgb_obs"]["rgb_static"][0, 0]
+            target = self.sub_goals[:, sub_goal_idx].to(self.device)
+            # init = obs["rgb_obs"]["rgb_static"][0, 0]
+            if "rgb_gripper" in obs["rgb_obs"].keys():
+                init = torch.stack(
+                    [
+                        obs["rgb_obs"]["rgb_gripper"][0, 0],
+                        obs["rgb_obs"]["rgb_static"][0, 0],
+                    ]
+                )
+                torch.stack(
+                    [
+                        obs["rgb_obs"]["rgb_gripper"][0, 0],
+                        obs["rgb_obs"]["rgb_static"][0, 0],
+                    ]
+                )
+            else:
+                init = obs["rgb_obs"]["rgb_static"][0]
 
-            obs_goal_images = torch.cat([init[None], target[None]], dim=0)
+            obs_goal_images = torch.cat([init, target], dim=0)
 
             # Save initial and target frames
             if self.debug:
@@ -249,7 +266,7 @@ class CustomModel(CalvinBaseModel):
                     f"init_target_{self.steps}.png",
                 )
 
-            state = torch.zeros((2, 0)).to(self.device)
+            state = torch.zeros((len(obs["rgb_obs"].keys()) + 1, 0)).to(self.device)
             obs_goal = {
                 "observation.state": state[None],
                 "observation.images": obs_goal_images[None, :, None, ...],
@@ -568,16 +585,13 @@ if __name__ == "__main__":
         raise ValueError("Invalid server argument")
 
     # load high level config
-    high_level_cfg = OmegaConf.load(
-        os.path.join(
-            args.high_level_results_folder,
-            "data_config.yaml",
-        )
-    )
-    high_level_cfg.datamodule.lang_dataset._target_ = (
+    high_level_data_config.datamodule.lang_dataset._target_ = (
         "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset"
     )
-    high_level_cfg.root = data_path
+    high_level_data_config.datamodule.lang_dataset.obs_space.rgb_obs = (
+        policy_data_config.datamodule.lang_dataset.obs_space.rgb_obs
+    )
+    high_level_data_config.root = data_path
 
     transforms_dict = OmegaConf.load(
         os.path.join(
@@ -587,9 +601,9 @@ if __name__ == "__main__":
     )
 
     data_module = CalvinDataModule(
-        high_level_cfg.datamodule,
+        high_level_data_config.datamodule,
         transforms=transforms_dict,
-        root_data_dir=high_level_cfg.root,
+        root_data_dir=high_level_data_config.root,
     )
     data_module.setup()
 
