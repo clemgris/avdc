@@ -78,7 +78,7 @@ def main(args):
                     },
                     "obs_space": {
                         "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
-                        "depth_obs": ["depth_static"],  # DEBUG
+                        "depth_obs": ["depth_static"] if args.use_depth else [],
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -583,10 +583,16 @@ if __name__ == "__main__":
         default="CLIP",
         choices=["CLIP", "Flan-t5", "Siglip"],
     )  # set to text encoder type
+    parser.add_argument("--use_depth", action="store_true")  # set to use depth images
     args = parser.parse_args()
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None
         assert args.text is not None
         assert args.sample_steps <= 100
+    if args.mode == "train":
+        if args.use_depth:
+            assert args.diffuse_on == "pixel", (
+                "Depth images only supported for pixel diffusion"
+            )
     main(args)
