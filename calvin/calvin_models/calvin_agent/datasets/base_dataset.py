@@ -1,20 +1,11 @@
 import logging
+import os
 from pathlib import Path
 from typing import Dict, Tuple, Union
 
 import numpy as np
 import pyhash
 import torch
-from calvin_agent.datasets.utils.episode_utils import (
-    get_state_info_dict,
-    process_actions,
-    process_depth,
-    process_features,
-    process_language,
-    process_rgb,
-    process_state,
-)
-from einops import rearrange
 from omegaconf import DictConfig
 from torch.utils.data import Dataset
 
@@ -105,90 +96,18 @@ class BaseDataset(Dataset):
         logger.info("finished loading dataset")
 
         self.dino_stats_path = self.abs_datasets_dir / f"../{self.diffuse_on}_stats.pt"
+        if os.path.exists(self.dino_stats_path):
+            self.dino_stats = torch.load(self.dino_stats_path)
+        else:
+            self.dino_stats = None
+
         self.norm_dino_feat = norm_dino_feat
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
-        """
-        Get sequence of dataset.
-
-        Args:
-            idx: Index of the sequence.
-
-        Returns:
-            Loaded sequence.
-        """
-
-        sequence = self._get_sequences(idx)
-        if self.pad:
-            pad_size = self._get_pad_size(sequence)
-            sequence = self._pad_sequence(sequence, pad_size)
-        images = sequence["rgb_obs"]["rgb_static"]  # ["rgb_gripper"]
-        dino_features = sequence["dino_features"]
-
-        if self.with_dino_feat:
-            x_cond = dino_features[0][None, ...]
-            x_cond = rearrange(x_cond, "f wh c -> f c wh")
-            x_cond = rearrange(
-                x_cond,
-                "f c (w h) -> f c w h",
-                w=self.feat_patch_size,
-                h=self.feat_patch_size,
-            )
-            x_cond = x_cond.squeeze(0)
-
-            x = dino_features[1:].squeeze(1)
-            x = rearrange(x, "f wh c -> f c wh")
-            x = rearrange(
-                x,
-                "f c (w h) -> f c w h",
-                w=self.feat_patch_size,
-                h=self.feat_patch_size,
-            )
-            x = rearrange(x, "f c h w -> (f c) h w")
-        else:
-            x_cond = images[0, ...]
-            x = images[1:, ...]
-            x_cond = x_cond.squeeze(0)
-            x = rearrange(x, "f c h w -> (f c) h w")
-        task = sequence["lang"]
-        return x, x_cond, task
+        raise NotImplementedError
 
     def _get_sequences(self, idx: int) -> Dict:
-        """
-        Load sequence of length window_size.
-
-        Args:
-            idx: Index of starting frame.
-
-        Returns:
-            dict: Dictionary of tensors of loaded sequence with different input modalities and actions.
-        """
-
-        episode = self._load_episode(idx)
-
-        seq_state_obs = process_state(
-            episode, self.observation_space, self.transforms, self.proprio_state
-        )
-        seq_rgb_obs = process_rgb(episode, self.observation_space, self.transforms)
-        seq_depth_obs = process_depth(episode, self.observation_space, self.transforms)
-        seq_acts = process_actions(episode, self.observation_space, self.transforms)
-        info = get_state_info_dict(episode)
-        seq_lang = process_language(episode, self.transforms, self.with_lang)
-        seq_feat = process_features(
-            episode, self.with_dino_feat, self.dino_stats_path, self.norm_dino_feat
-        )
-        seq_dict = {
-            **seq_state_obs,
-            **seq_rgb_obs,
-            **seq_depth_obs,
-            **seq_acts,
-            **info,
-            **seq_lang,
-            **seq_feat,
-        }  # type:ignore
-        seq_dict["idx"] = idx  # type:ignore
-
-        return seq_dict
+        raise NotImplementedError
 
     def _load_episode(
         self,
