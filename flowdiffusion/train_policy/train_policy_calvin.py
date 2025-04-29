@@ -72,7 +72,7 @@ def main(args):
                         "rgb_obs": ["rgb_static"]
                         if not args.use_ego_obs
                         else ["rgb_static", "rgb_gripper"],
-                        "depth_obs": [],
+                        "depth_obs": ["depth_static"] if args.use_depth else [],
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -89,6 +89,8 @@ def main(args):
             "save_every": 100,  # In gradient steps
         }
     )
+
+    n_channels = 4 if args.use_depth else 3
 
     transforms = OmegaConf.load(
         os.path.join(
@@ -133,7 +135,7 @@ def main(args):
             )
             - 1,
             "input_shapes": {
-                "observation.image": [3, 96, 96],
+                "observation.image": [n_channels, 96, 96],
                 "observation.state": [0],
             },
             "output_shapes": {
@@ -249,5 +251,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_ego_obs", type=bool, default=False
     )  # set to True to use ego observations
+    parser.add_argument(
+        "--use_depth", type=bool, default=False
+    )  # set to True to use depth observations
     args = parser.parse_args()
     main(args)
