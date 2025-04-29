@@ -101,15 +101,14 @@ def process_rgb(
 def process_features(
     episode: Dict[str, np.ndarray],
     with_dino_feat: bool,
-    dino_stats_path: str,
+    dino_stats: Dict[str, torch.Tensor] | None,
     norm_dino_feat: str | None,
 ) -> Dict[str, Dict[str, torch.Tensor]]:
     seq_dino_feat = {"dino_features": torch.empty(0)}
     if with_dino_feat:
         seq_dino_feat_ = torch.tensor(np.array(episode["dino_features"]))
         if norm_dino_feat is not None:
-            if os.path.exists(dino_stats_path):
-                dino_stats = torch.load(dino_stats_path)["dino_features"]
+            if dino_stats is not None:
                 if norm_dino_feat == "l2":
                     seq_dino_feat_ = F.normalize(seq_dino_feat_, p=2, dim=-1)
                 elif norm_dino_feat == "z_score":
@@ -141,9 +140,7 @@ def process_features(
                         f"Normalization method {norm_dino_feat} not supported"
                     )
             else:
-                raise FileNotFoundError(
-                    f"Path to dino features statistics {dino_stats_path} not found"
-                )
+                raise FileNotFoundError("Dino features statistics is None")
         seq_dino_feat["dino_features"] = seq_dino_feat_
     return seq_dino_feat
 
@@ -157,15 +154,15 @@ def process_depth(
 ) -> Dict[str, Dict[str, torch.Tensor]]:
     # expand dims for single environment obs
     def exp_dim(depth_img):
-        if len(depth_img.shape) != 3:
-            depth_img = np.expand_dims(depth_img, axis=0)
+        if len(depth_img.shape) != 4:
+            depth_img = np.expand_dims(depth_img, axis=1)
         return depth_img
 
     depth_obs_keys = observation_space["depth_obs"]
     seq_depth_obs_dict = {}
     for _, depth_obs_key in enumerate(depth_obs_keys):
         depth_ob = exp_dim(episode[depth_obs_key])
-        assert len(depth_ob.shape) == 3
+        # assert len(depth_ob.shape) == 3
         if window_size == 0 and seq_idx == 0:  # single file loader
             depth_ob_ = torch.from_numpy(depth_ob).float()
         else:  # episode loader
@@ -175,8 +172,12 @@ def process_depth(
         # we might have different transformations for the different cameras
         if depth_obs_key in transforms:
             depth_ob_ = transforms[depth_obs_key](depth_ob_)
+            # minmax normalization
+            depth_ob_ = (depth_ob_ - depth_ob_.min()) / (
+                depth_ob_.max() - depth_ob_.min()
+            )
+            depth_ob_ = depth_ob_ * 2 - 1
         seq_depth_obs_dict[depth_obs_key] = depth_ob_
-    # shape: N_depth_obs x(BxHxW)
     return {"depth_obs": seq_depth_obs_dict}
 
 

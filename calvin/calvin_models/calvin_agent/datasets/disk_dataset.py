@@ -793,6 +793,43 @@ class DiskActionDataset(BaseDataset):
                 )
         return np.array(episode_lookup)
 
+    def _get_sequences(self, idx: int) -> Dict:
+        """
+        Load sequence of length window_size.
+
+        Args:
+            idx: Index of starting frame.
+
+        Returns:
+            dict: Dictionary of tensors of loaded sequence with different input modalities and actions.
+        """
+
+        episode = self._load_episode(idx)
+
+        seq_state_obs = process_state(
+            episode, self.observation_space, self.transforms, self.proprio_state
+        )
+        seq_rgb_obs = process_rgb(episode, self.observation_space, self.transforms)
+        seq_depth_obs = process_depth(episode, self.observation_space, self.transforms)
+        seq_acts = process_actions(episode, self.observation_space, self.transforms)
+        info = get_state_info_dict(episode)
+        seq_lang = process_language(episode, self.transforms, self.with_lang)
+        seq_feat = process_features(
+            episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+        )
+        seq_dict = {
+            **seq_state_obs,
+            **seq_rgb_obs,
+            **seq_depth_obs,
+            **seq_acts,
+            **info,
+            **seq_lang,
+            **seq_feat,
+        }  # type:ignore
+        seq_dict["idx"] = idx  # type:ignore
+
+        return seq_dict
+
     def _pad_sequence(self, seq: Dict, pad_size: int) -> Dict:
         """
         Pad a sequence by repeating the last frame.
@@ -930,6 +967,14 @@ class DiskActionDataset(BaseDataset):
                     sequence["rgb_obs"]["rgb_static"][0],
                 ]
             )
+        elif "depth_static" in sequence["depth_obs"].keys():
+            start_image = torch.cat(
+                [
+                    sequence["rgb_obs"]["rgb_static"][0],
+                    sequence["depth_obs"]["depth_static"][0],
+                ],
+                dim=0,
+            )[None]
         else:
             start_image = sequence["rgb_obs"]["rgb_static"]
 
@@ -937,6 +982,15 @@ class DiskActionDataset(BaseDataset):
         end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
             sequence["rgb_obs"]["rgb_static"][-1]
         )[None]
+
+        if "depth_static" in sequence["depth_obs"].keys():
+            end_image = torch.cat(
+                [
+                    end_image,
+                    sequence["depth_obs"]["depth_static"][-1][None],
+                ],
+                dim=1,
+            )
         # Stack start and end images
         start_end_images = torch.cat([start_image, end_image], dim=0)
         state = torch.zeros((start_end_images.shape[0], 0))
