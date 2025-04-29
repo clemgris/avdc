@@ -78,7 +78,7 @@ def main(args):
                     },
                     "obs_space": {
                         "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
-                        "depth_obs": [],
+                        "depth_obs": ["depth_static"],  # DEBUG
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -109,7 +109,10 @@ def main(args):
         channel = 768
     elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
         target_size = (96, 96)
-        channel = 3
+        if "depth_static" in cfg.datamodule.lang_dataset.obs_space.depth_obs:
+            channel = 4
+        else:
+            channel = 3
     else:
         raise ValueError(
             f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."

@@ -27,6 +27,17 @@ import os
 from pynvml import *
 
 
+def save_images(img, path: str, nrow: int = 1):
+    if img.shape[1] == 3:  # RGB image
+        utils.save_image(img, path, nrow=nrow)
+    else:  # RGB-D image
+        rgb_image = img[:, :3, :, :]
+        depth_image = img[:, 3:, :, :].expand(-1, 3, -1, -1)
+        img = torch.cat((rgb_image, depth_image), dim=1)
+        img = rearrange(img, "b (x c) h w -> (x b) c h w", x=2)
+        utils.save_image(img, path, nrow=nrow)
+
+
 def print_gpu_utilization():
     nvmlInit()
     handle = nvmlDeviceGetHandleByIndex(0)
@@ -900,7 +911,7 @@ class Trainer(object):
         if self.accelerator.is_main_process:
             print(f"Number of input channels: {self.in_channels}")
 
-        if self.in_channels > 3:
+        if self.in_channels > 4:
             self.feature_decoder = feature_decoder
             self.features_stats = torch.load(dino_stats_path)["dino_features"]
             self.norm_feat = norm_feat
@@ -1148,8 +1159,8 @@ class Trainer(object):
 
                         print_gpu_utilization()
 
-                        gt_xs = torch.cat(xs, dim=0)  # [batch_size, 3*n, 120, 160]
-                        # make it [batchsize*n, 3, 120, 160]
+                        gt_xs = torch.cat(xs, dim=0)  # [batch_size, c*n, H, W]
+                        # make it [batchsize*n, c, H, W]
                         n_rows = gt_xs.shape[1] // self.in_channels
                         gt_xs = rearrange(gt_xs, "b (n c) h w -> b n c h w", n=n_rows)
                         ### save images
@@ -1167,7 +1178,7 @@ class Trainer(object):
                             gt_img = rearrange(
                                 gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
-                            if self.in_channels > 3:
+                            if self.in_channels > 4:
                                 gt_img = rearrange(
                                     gt_img,
                                     "(b n) c h w -> (b n) (h w) c ",
@@ -1205,7 +1216,7 @@ class Trainer(object):
                                 # Unormalise
                                 gt_img = (gt_img + 1) / 2
 
-                            utils.save_image(
+                            save_images(
                                 gt_img,
                                 str(self.results_folder / "val_imgs/gt_img.png"),
                                 nrow=n_rows + 1,
@@ -1222,7 +1233,7 @@ class Trainer(object):
                         pred_img = rearrange(
                             pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
-                        if self.in_channels > 3:
+                        if self.in_channels > 4:
                             pred_img = rearrange(
                                 pred_img, "(b n) c h w -> (b n) (h w) c ", n=n_rows + 1
                             )
@@ -1257,7 +1268,7 @@ class Trainer(object):
                             # Unormalise
                             pred_img = (pred_img + 1) / 2
 
-                        utils.save_image(
+                        save_images(
                             pred_img,
                             str(
                                 self.results_folder
