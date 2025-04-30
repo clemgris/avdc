@@ -913,7 +913,7 @@ class Trainer(object):
 
         if self.in_channels > 4:
             self.feature_decoder = feature_decoder
-            self.features_stats = dino_stats["dino_features"]
+            self.features_stats = dino_stats
             self.norm_feat = norm_feat
         else:
             self.feature_decoder = None
