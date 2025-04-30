@@ -876,7 +876,7 @@ class Trainer(object):
         calculate_fid=True,
         inception_block_idx=2048,
         cond_drop_chance=0.1,
-        dino_stats_path=None,
+        dino_stats=None,
         norm_feat=None,
     ):
         super().__init__()
@@ -913,7 +913,7 @@ class Trainer(object):
 
         if self.in_channels > 4:
             self.feature_decoder = feature_decoder
-            self.features_stats = torch.load(dino_stats_path)["dino_features"]
+            self.features_stats = dino_stats["dino_features"]
             self.norm_feat = norm_feat
         else:
             self.feature_decoder = None

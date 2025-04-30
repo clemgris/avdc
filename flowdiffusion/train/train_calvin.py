@@ -305,7 +305,7 @@ def main(args):
         precision=precision,
         amp=amp,
         calculate_fid=False,
-        dino_stats_path=os.path.join(cfg.root, "dino_stats.pt"),
+        dino_stats=train_set.dino_stats,
         norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
     )
 
