@@ -50,6 +50,11 @@ def main(args):
         raise ValueError(f"Unknown dataset name {args.train_on}")
     print(f"Training on {dataset_name} dataset")
 
+    if args.diffuse_on == "dino_vit":
+        diffuse_on = f"dino_vit_{args.feat_patch_size}"
+    else:
+        diffuse_on = args.diffuse_on
+
     cfg = DictConfig(
         {
             "root": data_path,
@@ -81,14 +86,18 @@ def main(args):
                     "pad": True,
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
-                    "diffuse_on": "pixel",
+                    "diffuse_on": diffuse_on,
+                    "norm_dino_feat": args.norm,
                     "prob_aug": args.data_aug_prob,
+                    "feat_patch_size": args.feat_patch_size,
                 },
             },
             "training_steps": 150000,  # In gradient steps
             "save_every": 100,  # In gradient steps
         }
     )
+
+    print("Config:\n" + OmegaConf.to_yaml(cfg))
 
     n_channels = 4 if args.use_depth else 3
 
@@ -122,7 +131,12 @@ def main(args):
     device = torch.device("cuda")
     log_freq = 10
 
-    n_obs_steps = len(cfg.datamodule[dataset_name]["obs_space"]["rgb_obs"]) + 1
+    if args.diffuse_on == "pixel":
+        n_obs_steps = len(cfg.datamodule[dataset_name]["obs_space"]["rgb_obs"]) + 1
+        image_shape = [n_channels, 96, 96]
+    elif "dino" in args.diffuse_on:
+        n_obs_steps = 2
+        image_shape = [768, args.feat_patch_size, args.feat_patch_size]
 
     diff_cfg = DictConfig(
         {
@@ -135,7 +149,7 @@ def main(args):
             )
             - 1,
             "input_shapes": {
-                "observation.image": [n_channels, 96, 96],
+                "observation.image": image_shape,
                 "observation.state": [0],
             },
             "output_shapes": {
@@ -144,6 +158,7 @@ def main(args):
             "n_action_steps": 8,
             "input_normalization_modes": {},
             "output_normalization_modes": {"action": "min_max"},
+            "crop_shape": None,
         }
     )
     diff_cfg = DiffusionConfig(**diff_cfg)
@@ -254,5 +269,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_depth", type=bool, default=False
     )  # set to True to use depth observations
+    parser.add_argument(
+        "--diffuse_on", type=str, default="pixel"
+    )  # set to diffuse on pixel or dino features
+    parser.add_argument(
+        "--feat_patch_size", type=int, default=16
+    )  # set to feature patch size for dino features
+    parser.add_argument(
+        "--norm", type=str, default=None, choices=[None, "l2", "z_score", "min_max"]
+    )  # set to normalisation type for features
     args = parser.parse_args()
     main(args)

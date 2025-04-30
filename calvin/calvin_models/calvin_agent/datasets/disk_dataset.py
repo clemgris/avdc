@@ -960,37 +960,56 @@ class DiskActionDataset(BaseDataset):
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
 
-        if "rgb_gripper" in sequence["rgb_obs"].keys():
-            start_image = torch.stack(
-                [
-                    sequence["rgb_obs"]["rgb_gripper"][0],
-                    sequence["rgb_obs"]["rgb_static"][0],
-                ]
-            )
-        elif "depth_static" in sequence["depth_obs"].keys():
-            start_image = torch.cat(
-                [
-                    sequence["rgb_obs"]["rgb_static"][0],
-                    sequence["depth_obs"]["depth_static"][0],
-                ],
-                dim=0,
+        if not self.with_dino_feat:
+            if "rgb_gripper" in sequence["rgb_obs"].keys():
+                start_image = torch.stack(
+                    [
+                        sequence["rgb_obs"]["rgb_gripper"][0],
+                        sequence["rgb_obs"]["rgb_static"][0],
+                    ]
+                )
+            elif "depth_static" in sequence["depth_obs"].keys():
+                start_image = torch.cat(
+                    [
+                        sequence["rgb_obs"]["rgb_static"][0],
+                        sequence["depth_obs"]["depth_static"][0],
+                    ],
+                    dim=0,
+                )[None]
+            else:
+                start_image = sequence["rgb_obs"]["rgb_static"][0][None]
+
+            end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
+                sequence["rgb_obs"]["rgb_static"][-1]
             )[None]
-        else:
-            start_image = sequence["rgb_obs"]["rgb_static"]
+
+            if "depth_static" in sequence["depth_obs"].keys():
+                end_image = torch.cat(
+                    [
+                        end_image,
+                        sequence["depth_obs"]["depth_static"][-1][None],
+                    ],
+                    dim=1,
+                )
+
+        elif self.with_dino_feat:
+            start_image = sequence["dino_features"][0][None]
+            start_image = rearrange(
+                start_image,
+                "f (w h) c -> f c w h",
+                w=self.feat_patch_size,
+                h=self.feat_patch_size,
+            )
+            end_image = sequence["dino_features"][-1][None]
+            end_image = rearrange(
+                end_image,
+                "f (w h) c -> f c w h",
+                w=self.feat_patch_size,
+                h=self.feat_patch_size,
+            )
 
         actions = sequence["actions"][:-1]
-        end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
-            sequence["rgb_obs"]["rgb_static"][-1]
-        )[None]
 
-        if "depth_static" in sequence["depth_obs"].keys():
-            end_image = torch.cat(
-                [
-                    end_image,
-                    sequence["depth_obs"]["depth_static"][-1][None],
-                ],
-                dim=1,
-            )
         # Stack start and end images
         start_end_images = torch.cat([start_image, end_image], dim=0)
         state = torch.zeros((start_end_images.shape[0], 0))
