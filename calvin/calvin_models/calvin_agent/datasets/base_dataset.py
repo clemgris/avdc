@@ -97,9 +97,12 @@ class BaseDataset(Dataset):
 
         self.dino_stats_path = self.abs_datasets_dir / f"../{self.diffuse_on}_stats.pt"
         if os.path.exists(self.dino_stats_path):
-            self.dino_stats = torch.load(self.dino_stats_path)
+            self.dino_stats = torch.load(self.dino_stats_path)["dino_features"]
         else:
             self.dino_stats = None
+            assert self.diffuse_on == "pixel", (
+                f"Cannot diffuse on {self.diffuse_on} without dino stats file, not found in {self.dino_stats_path}."
+            )
 
         self.norm_dino_feat = norm_dino_feat
 
