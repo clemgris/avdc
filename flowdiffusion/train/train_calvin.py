@@ -217,7 +217,7 @@ def main(args):
 
     elif args.text_encoder == "Siglip":
         if args.server == "jz":
-            text_pretrained_model = "lustre/fsn1/projects/rech/fch/uxv44vw/models/google/siglip-base-patch16-224"
+            text_pretrained_model = "/lustre/fsn1/projects/rech/fch/uxv44vw/models/google/siglip-base-patch16-224"
         else:
             text_pretrained_model = "google/siglip-base-patch16-224"
         tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
