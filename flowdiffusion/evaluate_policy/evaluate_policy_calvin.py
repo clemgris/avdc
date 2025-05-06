@@ -103,7 +103,10 @@ class CustomModel(CalvinBaseModel):
         self.sample_subgoals_every = 8
         if not self.use_oracle_subgoals:
             if cfg.high_level.datamodule.lang_dataset.diffuse_on == "pixel":
-                if "depth_static" in cfg.datamodule.lang_dataset.obs_space.depth_obs:
+                if (
+                    "depth_static"
+                    in cfg.high_level.datamodule.lang_dataset.obs_space.depth_obs
+                ):
                     self.high_level_channels = 4
                 else:
                     self.high_level_channels = 3
