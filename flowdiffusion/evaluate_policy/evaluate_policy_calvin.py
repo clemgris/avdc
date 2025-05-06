@@ -14,7 +14,14 @@ from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import seed_everything
 from termcolor import colored
-from transformers import CLIPTextModel, CLIPTokenizer
+from transformers import (
+    AutoTokenizer,
+    CLIPTextModel,
+    CLIPTokenizer,
+    SiglipTextModel,
+    SiglipTokenizer,
+    T5EncoderModel,
+)
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -96,24 +103,77 @@ class CustomModel(CalvinBaseModel):
         self.sample_subgoals_every = 8
         if not self.use_oracle_subgoals:
             if cfg.high_level.datamodule.lang_dataset.diffuse_on == "pixel":
-                self.high_level_channels = 3
+                if "depth_static" in cfg.datamodule.lang_dataset.obs_space.depth_obs:
+                    self.high_level_channels = 4
+                else:
+                    self.high_level_channels = 3
                 feature_decoder = None
-            elif cfg.high_level.datamodule.lang_dataset.diffuse_on == "dino_feat":
+                target_size = (96, 96)
+                channel_mult = (1, 2, 3, 4, 5)
+            elif "dino" in cfg.high_level.datamodule.lang_dataset.diffuse_on:
                 self.high_level_channels = 768
-                raise NotImplementedError
+                target_size = (
+                    cfg.high_level.datamodule.lang_dataset.feat_patch_size,
+                    cfg.high_level.datamodule.lang_dataset.feat_patch_size,
+                )
+                if cfg.high_level.datamodule.lang_dataset.feat_patch_size == 16:
+                    channel_mult = (1, 2, 3)
+                elif cfg.high_level.datamodule.lang_dataset.feat_patch_size == 32:
+                    channel_mult = (1, 2, 3, 4)
+                elif cfg.high_level.datamodule.lang_dataset.feat_patch_size == 64:
+                    channel_mult = (1, 2, 3, 4, 5)
 
-            unet = Unet(in_channels=self.high_level_channels)
-            unet = unet.to(self.device)
+            if cfg.high_level.text_encoder == "CLIP":
+                if cfg.server == "jz":
+                    text_pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+                else:
+                    text_pretrained_model = "openai/clip-vit-base-patch32"
 
-            if cfg.server == "jz":
-                pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
-            else:
-                pretrained_model = "openai/clip-vit-base-patch32"
+                tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
+                text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
+                text_embed_dim = 512
+                amp = True
+                precision = "fp16"
 
-            tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
-            text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
+            elif cfg.high_level.text_encoder == "Flan-t5":
+                if cfg.server == "jz":
+                    text_pretrained_model = (
+                        "/lustre/fsmisc/dataset/HuggingFace_Models/google/flan-t5-base"
+                    )
+                else:
+                    text_pretrained_model = "google/flan-t5-base"
+                text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
+                tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
+                text_embed_dim = 768
+                amp = False
+                precision = "no"
+
+            elif cfg.high_level.text_encoder == "Siglip":
+                if cfg.server == "jz":
+                    text_pretrained_model = "/lustre/fsn1/projects/rech/fch/uxv44vw/models/google/siglip-base-patch16-224"
+                else:
+                    text_pretrained_model = "google/siglip-base-patch16-224"
+                tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
+                text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
+                text_embed_dim = 768
+                amp = True
+                precision = "fp16"
+
+            text_encoder = text_encoder.to(device)
             text_encoder.requires_grad_(False)
             text_encoder.eval()
+
+            text_encoder_num_params = sum(p.numel() for p in text_encoder.parameters())
+            print(
+                f"Number of parameters in text encoder {text_pretrained_model}: {text_encoder_num_params / 1e6:.2f}M"
+            )
+
+            unet = Unet(
+                in_channels=self.high_level_channels,
+                channel_mult=channel_mult,
+                text_embed_dim=text_embed_dim,
+            )
+            unet = unet.to(self.device)
 
             sample_per_seq = 8
             self.sample_steps = 100
@@ -121,7 +181,7 @@ class CustomModel(CalvinBaseModel):
             diffusion = GoalGaussianDiffusion(
                 channels=3 * (sample_per_seq - 1),
                 model=unet,
-                image_size=(96, 96),
+                image_size=target_size,
                 timesteps=100,
                 sampling_timesteps=self.sample_steps,
                 loss_type="l2",
@@ -147,8 +207,8 @@ class CustomModel(CalvinBaseModel):
                 gradient_accumulate_every=1,
                 num_samples=1,
                 results_folder=self.cfg.high_level.results_folder,
-                precision="fp16",
-                amp=True,
+                precision=precision,
+                amp=amp,
                 calculate_fid=False,
                 feature_decoder=feature_decoder,
             )
@@ -248,11 +308,20 @@ class CustomModel(CalvinBaseModel):
                         obs["rgb_obs"]["rgb_static"][0, 0],
                     ]
                 )
-                torch.stack(
+            elif "depth_static" in obs["depth_obs"].keys():
+                init = torch.cat(
                     [
-                        obs["rgb_obs"]["rgb_gripper"][0, 0],
-                        obs["rgb_obs"]["rgb_static"][0, 0],
-                    ]
+                        obs["rgb_obs"]["rgb_static"][0],
+                        obs["depth_obs"]["depth_static"][0],
+                    ],
+                    dim=0,
+                )[None]
+                target = torch.cat(
+                    [
+                        target,
+                        obs["depth_obs"]["depth_static"][-1][None],
+                    ],
+                    dim=1,
                 )
             else:
                 init = obs["rgb_obs"]["rgb_static"][0]
@@ -266,7 +335,7 @@ class CustomModel(CalvinBaseModel):
                     f"init_target_{self.steps}.png",
                 )
 
-            state = torch.zeros((len(obs["rgb_obs"].keys()) + 1, 0)).to(self.device)
+            state = torch.zeros((obs_goal_images.shape[0], 0)).to(self.device)
             obs_goal = {
                 "observation.state": state[None],
                 "observation.images": obs_goal_images[None, :, None, ...],
