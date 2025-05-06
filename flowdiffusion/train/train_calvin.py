@@ -97,6 +97,7 @@ def main(args):
             "diffusion_objective": args.diff_objective,
             "min_batch_size": args.min_batch_size,
             "global_batch_size": args.batch_size,
+            "text_encoder": args.text_encoder,
         }
     )
 
