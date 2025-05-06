@@ -92,7 +92,7 @@ def main(args):
                     "feat_patch_size": args.feat_patch_size,
                 },
             },
-            "training_steps": 150000,  # In gradient steps
+            "training_steps": 250000,  # In gradient steps
             "save_every": 100,  # In gradient steps
         }
     )
