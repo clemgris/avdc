@@ -14,9 +14,9 @@ sys.path.append(
     )
 )
 
-
 import torch
 from omegaconf import DictConfig, OmegaConf
+from utils import assert_configs_equal
 
 from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
@@ -177,10 +177,25 @@ def main(args):
 
     cfg["stats_path"] = stats_path
     # Save cfg
-    with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
-        file.write(OmegaConf.to_yaml(cfg))
+    if args.checkpoint_num is not None:
+        # Load checkpoint config which is a yaml
+        checkpoint_cfg_path = os.path.join(results_folder, "data_config.yaml")
+        checkpoint_cfg = OmegaConf.load(checkpoint_cfg_path)
+
+        assert assert_configs_equal(checkpoint_cfg, cfg, ["training_steps"])
+    else:
+        with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
+            file.write(OmegaConf.to_yaml(cfg))
 
     policy = DiffusionPolicy(diff_cfg, dataset_stats=train_stats_dict)
+
+    if args.checkpoint_num is not None:
+        checkpoint_path = os.path.join(
+            results_folder, f"model-{args.checkpoint_num}.pt"
+        )
+        print(f"Loading checkpoint from {checkpoint_path}")
+        policy.load_state_dict(torch.load(checkpoint_path))
+
     policy.train()
     policy.to(device)
 
@@ -200,7 +215,10 @@ def main(args):
     )
 
     # Run training loop.
-    step = 0
+    if args.checkpoint_num is not None:
+        step = 0
+    else:
+        step = args.checkpoint_num
     done = False
     while not done:
         for batch in dataloader:
