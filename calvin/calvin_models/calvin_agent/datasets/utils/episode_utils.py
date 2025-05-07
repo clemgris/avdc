@@ -154,7 +154,9 @@ def process_depth(
 ) -> Dict[str, Dict[str, torch.Tensor]]:
     # expand dims for single environment obs
     def exp_dim(depth_img):
-        if len(depth_img.shape) != 4:
+        if len(depth_img.shape) == 2:
+            depth_img = np.expand_dims(depth_img, axis=0)
+        if len(depth_img.shape) == 3:
             depth_img = np.expand_dims(depth_img, axis=1)
         return depth_img
 

@@ -34,6 +34,7 @@ sys.path.append(
 
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from unet import UnetMW as Unet
+from utils import save_images
 
 sys.path.append(
     os.path.join(
@@ -182,7 +183,7 @@ class CustomModel(CalvinBaseModel):
             self.sample_steps = 100
 
             diffusion = GoalGaussianDiffusion(
-                channels=3 * (sample_per_seq - 1),
+                channels=self.high_level_channels * (sample_per_seq - 1),
                 model=unet,
                 image_size=target_size,
                 timesteps=100,
@@ -229,7 +230,7 @@ class CustomModel(CalvinBaseModel):
 
     def save_image(self, image, name):
         saving_path = Path(self.debug_path) / name
-        torchvision.utils.save_image((image + 1) / 2, saving_path)
+        save_images((image + 1) / 2, saving_path)
 
     def step(self, obs, text_goal, oracle_subgoals=None):
         """
@@ -241,6 +242,14 @@ class CustomModel(CalvinBaseModel):
         """
         # Normalise obs
         obs_image = obs["rgb_obs"]["rgb_static"]
+        if "depth_static" in obs["depth_obs"].keys():
+            obs_image = torch.cat(
+                [
+                    obs_image,
+                    obs["depth_obs"]["depth_static"],
+                ],
+                dim=-3,
+            )
         # Save image
         if self.debug:
             self.save_image(
@@ -282,7 +291,9 @@ class CustomModel(CalvinBaseModel):
                     .detach()
                 )
                 self.sub_goals = rearrange(
-                    self.sub_goals, "b (f c) w h -> b f c w h", c=3
+                    self.sub_goals,
+                    "b (f c) w h -> b f c w h",
+                    c=self.high_level_channels,
                 )
                 if self.debug:
                     # Save subgoals
@@ -314,18 +325,11 @@ class CustomModel(CalvinBaseModel):
             elif "depth_static" in obs["depth_obs"].keys():
                 init = torch.cat(
                     [
-                        obs["rgb_obs"]["rgb_static"][0],
-                        obs["depth_obs"]["depth_static"][0],
+                        obs["rgb_obs"]["rgb_static"][0, 0],
+                        obs["depth_obs"]["depth_static"][0, 0],
                     ],
                     dim=0,
                 )[None]
-                target = torch.cat(
-                    [
-                        target,
-                        obs["depth_obs"]["depth_static"][-1][None],
-                    ],
-                    dim=1,
-                )
             else:
                 init = obs["rgb_obs"]["rgb_static"][0]
 
@@ -562,7 +566,7 @@ if __name__ == "__main__":
         "-db",
         "--debug",
         action="store_true",
-        help="Print debug info and visualize environment.",
+        help="Save generated subgoals and observation.",
     )
 
     parser.add_argument(
