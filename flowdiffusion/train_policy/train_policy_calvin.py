@@ -230,11 +230,10 @@ def main(args):
     )
 
     # Run training loop.
-    if args.checkpoint_num is not None:
-        step = 0
-    else:
-        step = args.checkpoint_num
     done = False
+    step = (
+        args.checkpoint_num * cfg.save_every if (args.checkpoint_num is not None) else 0
+    )
     pbar = tqdm(total=training_steps, initial=step, desc="Training")
 
     while not done:
