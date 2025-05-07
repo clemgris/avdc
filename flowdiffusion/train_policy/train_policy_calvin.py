@@ -182,14 +182,21 @@ def main(args):
         checkpoint_cfg_path = os.path.join(results_folder, "data_config.yaml")
         checkpoint_cfg = OmegaConf.load(checkpoint_cfg_path)
 
+        # Check if cfg and checkpoint_cfg align
+        mismatching_keys = []
+        allowed_mismatch = ["training_steps"]  # Allow mismatch for training steps
         for key in cfg.keys():
             if key not in checkpoint_cfg:
+                mismatching_keys.append(key)
                 print(f"Key {key} not in checkpoint config.")
             elif cfg[key] != checkpoint_cfg[key]:
+                mismatching_keys.append(key)
                 print(
                     f"Key {key} has different value in checkpoint config {checkpoint_cfg[key]} != {cfg[key]}"
                 )
-        assert checkpoint_cfg == cfg, "Checkpoint config does not match current config."
+        assert all(key in allowed_mismatch for key in mismatching_keys), (
+            f"Keys {mismatching_keys} are not in the allowed mismatch list {allowed_mismatch}"
+        )
     else:
         with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
             file.write(OmegaConf.to_yaml(cfg))
