@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -234,6 +235,8 @@ def main(args):
     else:
         step = args.checkpoint_num
     done = False
+    pbar = tqdm(total=training_steps, initial=step, desc="Training")
+
     while not done:
         for batch in dataloader:
             batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
@@ -259,9 +262,11 @@ def main(args):
                 )
                 torch.save(policy.state_dict(), saving_path)
             step += 1
+            pbar.update(1)
             if step >= training_steps:
                 done = True
                 break
+    pbar.close()
 
 
 if __name__ == "__main__":
