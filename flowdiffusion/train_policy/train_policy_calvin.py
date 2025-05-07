@@ -251,16 +251,17 @@ def main(args):
 
             if step % cfg.save_every == 0:
                 # Delete previous checkpoints
-                past_saving_path = os.path.join(
-                    results_folder, f"model-{step // cfg.save_every - 2}.pt"
-                )
-                if os.path.exists(past_saving_path):
-                    os.remove(past_saving_path)
-                # Save model
-                saving_path = os.path.join(
-                    results_folder, f"model-{step // cfg.save_every}.pt"
-                )
-                torch.save(policy.state_dict(), saving_path)
+                if step != args.checkpoint_num:
+                    past_saving_path = os.path.join(
+                        results_folder, f"model-{step // cfg.save_every - 2}.pt"
+                    )
+                    if os.path.exists(past_saving_path):
+                        os.remove(past_saving_path)
+                    # Save model
+                    saving_path = os.path.join(
+                        results_folder, f"model-{step // cfg.save_every}.pt"
+                    )
+                    torch.save(policy.state_dict(), saving_path)
             pbar.set_postfix(loss=loss.item())
             step += 1
             pbar.update(1)
