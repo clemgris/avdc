@@ -230,7 +230,7 @@ class CustomModel(CalvinBaseModel):
 
     def save_image(self, image, name):
         saving_path = Path(self.debug_path) / name
-        save_images((image + 1) / 2, saving_path)
+        save_images((image + 1) / 2, saving_path, nrow=image.shape[0])
 
     def step(self, obs, text_goal, oracle_subgoals=None):
         """
@@ -274,10 +274,11 @@ class CustomModel(CalvinBaseModel):
                 )
         else:
             # Generate sequence of subgoals
-            if self.replan:
-                sample_subgoals = self.steps % self.ref_traj_length == 0
-            else:
-                sample_subgoals = self.steps == 0
+            sample_subgoals = (
+                self.steps % model.ref_traj_length == 0
+                if self.replan
+                else self.steps == 0
+            )
 
             if sample_subgoals:
                 print(
@@ -459,6 +460,7 @@ def rollout(
     model.reset()
     start_info = env.get_info()
     obs_list = []
+    subgoals = []
     for step in range(args.ep_len):
         # action = episode["actions"][step]
         action = model.step(obs, lang_annotation, episode)
@@ -469,20 +471,30 @@ def rollout(
         current_task_info = task_oracle.get_task_info_for_set(
             start_info, current_info, {task.replace(" ", "_")}
         )
+
+        if args.save_failures:
+            sample_subgoals = (
+                step % model.ref_traj_length == 0 if model.replan else step == 0
+            )
+            if sample_subgoals:
+                subgoals.append(model.sub_goals[0])
+
         if len(current_task_info) > 0:
             print(colored("S", "green"), end=" ")
             return True, step
     print(colored("F", "red"), end=" ")
     if args.save_failures:
-        # Create folder for this failed episode
-        os.makedirs(args.debug_path, exist_ok=True)
-        failed_episode_path = os.path.join(
-            args.debug_path, f"failed_{task.replace(' ', '_')}_{episode['idx']}"
-        )
-        os.makedirs(
-            failed_episode_path,
-            exist_ok=True,
-        )
+        if args.save_failures:
+            # Create folder for this failed episode
+            os.makedirs(args.debug_path, exist_ok=True)
+            failed_episode_path = os.path.join(
+                args.debug_path, f"failed_{task.replace(' ', '_')}_{episode['idx']}"
+            )
+            os.makedirs(
+                failed_episode_path,
+                exist_ok=True,
+            )
+
         # Save episode (as png)
         torchvision.utils.save_image(
             (torch.stack(obs_list) + 1) / 2,
@@ -491,18 +503,17 @@ def rollout(
                 "trajectory.png",
             ),
         )
+        # Save subgoals
+        for kk, subgoal in enumerate(subgoals):
+            model.save_image(
+                subgoal,
+                f"failed_{task.replace(' ', '_')}_{episode['idx']}/subgoals_{kk}.png",
+            )
         # Save episode (as gif)
         save_gif(
             obs_list, os.path.join(failed_episode_path, "trajectory.gif"), duration=1.0
         )
-        # Save subgoals
-        torchvision.utils.save_image(
-            (model.sub_goals[0] + 1) / 2,
-            os.path.join(
-                failed_episode_path,
-                "subgoals.png",
-            ),
-        )
+
     return False, step
 
 
