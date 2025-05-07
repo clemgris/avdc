@@ -16,7 +16,6 @@ sys.path.append(
 
 import torch
 from omegaconf import DictConfig, OmegaConf
-from utils import assert_configs_equal
 
 from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
@@ -183,11 +182,14 @@ def main(args):
         checkpoint_cfg_path = os.path.join(results_folder, "data_config.yaml")
         checkpoint_cfg = OmegaConf.load(checkpoint_cfg_path)
 
-        assert assert_configs_equal(
-            OmegaConf.to_container(checkpoint_cfg, resolve=True),
-            OmegaConf.to_container(cfg, resolve=True),
-            ["training_steps"],
-        )
+        for key in cfg.keys():
+            if key not in checkpoint_cfg:
+                print(f"Key {key} not in checkpoint config.")
+            elif cfg[key] != checkpoint_cfg[key]:
+                print(
+                    f"Key {key} has different value in checkpoint config {checkpoint_cfg[key]} != {cfg[key]}"
+                )
+        assert checkpoint_cfg == cfg, "Checkpoint config does not match current config."
     else:
         with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
             file.write(OmegaConf.to_yaml(cfg))
