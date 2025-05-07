@@ -120,6 +120,7 @@ def main(args):
                 f"Results folder {results_folder} already exists. Use --override to overwrite."
             )
     results_folder.mkdir(exist_ok=True, parents=True)
+    print("Results folder:", results_folder)
 
     train_set = data_module.train_datasets[dataset_key]
     valid_set = data_module.val_datasets[dataset_key]
