@@ -183,7 +183,11 @@ def main(args):
         checkpoint_cfg_path = os.path.join(results_folder, "data_config.yaml")
         checkpoint_cfg = OmegaConf.load(checkpoint_cfg_path)
 
-        assert assert_configs_equal(checkpoint_cfg, cfg, ["training_steps"])
+        assert assert_configs_equal(
+            OmegaConf.to_container(checkpoint_cfg, resolve=True),
+            OmegaConf.to_container(cfg, resolve=True),
+            ["training_steps"],
+        )
     else:
         with open(os.path.join(results_folder, "data_config.yaml"), "w") as file:
             file.write(OmegaConf.to_yaml(cfg))
