@@ -234,6 +234,7 @@ def main(args):
     step = (
         args.checkpoint_num * cfg.save_every if (args.checkpoint_num is not None) else 0
     )
+    print(f"Starting training at step {step}")
     pbar = tqdm(total=training_steps, initial=step, desc="Training")
 
     while not done:
@@ -260,6 +261,7 @@ def main(args):
                     results_folder, f"model-{step // cfg.save_every}.pt"
                 )
                 torch.save(policy.state_dict(), saving_path)
+            pbar.set_postfix(loss=loss.item())
             step += 1
             pbar.update(1)
             if step >= training_steps:
