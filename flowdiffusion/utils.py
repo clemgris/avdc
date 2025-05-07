@@ -1,6 +1,10 @@
 import glob
 import os
 
+import torch
+import torchvision.utils as utils
+from einops import rearrange
+
 
 def get_paths(root="../berkeley"):
     f = []
@@ -39,3 +43,14 @@ def assert_configs_equal(cfg1, cfg2, list_exception, path=""):
             assert_configs_equal(v1, v2, list_exception, new_path)
     else:
         assert cfg1 == cfg2, f"Value mismatch at {path}: {cfg1} != {cfg2}"
+
+
+def save_images(img, path: str, nrow: int = 1):
+    if img.shape[1] == 3:  # RGB image
+        utils.save_image(img, path, nrow=nrow)
+    else:  # RGB-D image
+        rgb_image = img[:, :3, :, :]
+        depth_image = img[:, 3:, :, :].expand(-1, 3, -1, -1)
+        img = torch.cat((rgb_image, depth_image), dim=1)
+        img = rearrange(img, "b (x c) h w -> (x b) c h w", x=2)
+        utils.save_image(img, path, nrow=nrow)

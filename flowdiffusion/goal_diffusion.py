@@ -16,8 +16,8 @@ from pytorch_fid.inception import InceptionV3
 from torch import einsum, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Subset
-from torchvision import utils
 from tqdm.auto import tqdm
+from utils import save_images
 from vis_features import pca_project_features
 
 __version__ = "0.0"
@@ -25,17 +25,6 @@ __version__ = "0.0"
 import os
 
 from pynvml import *
-
-
-def save_images(img, path: str, nrow: int = 1):
-    if img.shape[1] == 3:  # RGB image
-        utils.save_image(img, path, nrow=nrow)
-    else:  # RGB-D image
-        rgb_image = img[:, :3, :, :]
-        depth_image = img[:, 3:, :, :].expand(-1, 3, -1, -1)
-        img = torch.cat((rgb_image, depth_image), dim=1)
-        img = rearrange(img, "b (x c) h w -> (x b) c h w", x=2)
-        utils.save_image(img, path, nrow=nrow)
 
 
 def print_gpu_utilization():
