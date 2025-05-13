@@ -959,23 +959,72 @@ class DiskActionDataset(BaseDataset):
             sequence = self._pad_sequence(sequence, pad_size)
 
         if not self.with_dino_feat:
-            views = []
+            views_static = []
+            views_gripper = []
             for key in sequence["rgb_obs"].keys():
-                views.append(sequence["rgb_obs"][key][0])
+                if key == "rgb_static":
+                    views_static.append(sequence["rgb_obs"][key][0])
+                elif key == "rgb_gripper":
+                    views_gripper.append(sequence["rgb_obs"][key][-1])
             for key in sequence["depth_obs"].keys():
-                views.append(sequence["depth_obs"][key][0])
-            start_image = torch.cat(views, dim=0)[None]
+                if key == "depth_static":
+                    views_static.append(sequence["depth_obs"][key][0])
+                elif key == "depth_gripper":
+                    views_gripper.append(sequence["depth_obs"][key][-1])
 
-            target_views = []
+            assert len(views_static) > 0 or len(views_gripper) > 0
+
+            start_image_static = (
+                torch.cat(views_static, dim=0)[None] if len(views_static) > 0 else None
+            )
+            start_image_gripper = (
+                torch.cat(views_gripper, dim=0)[None]
+                if len(views_gripper) > 0
+                else None
+            )
+
+            target_views_static = []
+            target_views_gripper = []
+
             for key in sequence["rgb_obs"].keys():
-                target_views.append(
-                    get_stochastic_augmentation(p=self.prob_data_aug)(
-                        sequence["rgb_obs"][key][-1]
+                if key == "rgb_static":
+                    target_views_static.append(
+                        get_stochastic_augmentation(p=self.prob_data_aug)(
+                            sequence["rgb_obs"][key][-1]
+                        )
                     )
-                )
+                elif key == "rgb_gripper":
+                    target_views_gripper.append(
+                        get_stochastic_augmentation(p=self.prob_data_aug)(
+                            sequence["rgb_obs"][key][-1]
+                        )
+                    )
             for key in sequence["depth_obs"].keys():
-                target_views.append(sequence["depth_obs"][key][-1])
-            end_image = torch.cat(target_views, dim=0)[None]
+                if key == "depth_static":
+                    target_views_static.append(sequence["depth_obs"][key][-1])
+                elif key == "depth_gripper":
+                    target_views_gripper.append(sequence["depth_obs"][key][-1])
+
+            end_image_static = (
+                torch.cat(target_views_static, dim=0)[None]
+                if len(target_views_static) > 0
+                else None
+            )
+            end_image_gripper = (
+                torch.cat(target_views_gripper, dim=0)[None]
+                if len(target_views_gripper) > 0
+                else None
+            )
+            start_end_images_static = (
+                torch.cat([start_image_static, end_image_static], dim=0)
+                if len(target_views_static) > 0
+                else None
+            )
+            start_end_images_gripper = (
+                torch.cat([start_image_gripper, end_image_gripper], dim=0)
+                if len(target_views_gripper) > 0
+                else None
+            )
 
         elif self.with_dino_feat:
             start_image = sequence["dino_features"][0][None]
@@ -996,16 +1045,22 @@ class DiskActionDataset(BaseDataset):
         actions = sequence["actions"][:-1]
 
         # Stack start and end images
-        start_end_images = torch.cat([start_image, end_image], dim=0)
-        state = torch.zeros((start_end_images.shape[0], 0))
+        state = (
+            torch.zeros((start_end_images_static.shape[0], 0))
+            if len(views_static) > 0
+            else torch.zeros((start_end_images_gripper.shape[0], 0))
+        )
         action_is_pad = torch.zeros_like(actions)
 
         res = {
-            "observation.image": start_end_images,
             "observation.state": state,
             "action": actions,
             "action_is_pad": action_is_pad,
         }
+        if len(views_static) > 0:
+            res["observation.image_static"] = start_end_images_static
+        if len(views_gripper) > 0:
+            res["observation.image_gripper"] = start_end_images_gripper
         return res
 
 
