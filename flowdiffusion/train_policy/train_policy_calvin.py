@@ -74,10 +74,16 @@ def main(args):
                         "normalize_robot_orientation": True,
                     },
                     "obs_space": {
-                        "rgb_obs": ["rgb_static"]
-                        if not args.use_ego_obs
-                        else ["rgb_static", "rgb_gripper"],
-                        "depth_obs": ["depth_static"] if args.use_depth else [],
+                        "rgb_obs": ["rgb_static", "rgb_gripper"]
+                        if args.use_gripper
+                        else ["rgb_static"],
+                        "depth_obs": (
+                            ["depth_static"]
+                            if (args.use_depth and not args.use_gripper)
+                            else ["depth_static", "depth_gripper"]
+                            if (args.use_depth and args.use_gripper)
+                            else []
+                        ),
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -92,7 +98,7 @@ def main(args):
                     "feat_patch_size": args.feat_patch_size,
                 },
             },
-            "training_steps": 250000,  # In gradient steps
+            "training_steps": 500000,  # In gradient steps
             "save_every": 100,  # In gradient steps
         }
     )
@@ -133,7 +139,7 @@ def main(args):
     log_freq = 10
 
     if args.diffuse_on == "pixel":
-        n_obs_steps = len(cfg.datamodule[dataset_name]["obs_space"]["rgb_obs"]) + 1
+        n_obs_steps = 2
         image_shape = [n_channels, 96, 96]
     elif "dino" in args.diffuse_on:
         n_obs_steps = 2
@@ -150,7 +156,6 @@ def main(args):
             )
             - 1,
             "input_shapes": {
-                "observation.image": image_shape,
                 "observation.state": [0],
             },
             "output_shapes": {
@@ -162,6 +167,11 @@ def main(args):
             "crop_shape": None,
         }
     )
+
+    diff_cfg["input_shapes"]["observation.image_static"] = image_shape
+    if args.use_gripper:
+        diff_cfg["input_shapes"]["observation.image_gripper"] = image_shape
+
     diff_cfg = DiffusionConfig(**diff_cfg)
     cfg["diff_cfg"] = diff_cfg
 
@@ -303,11 +313,11 @@ if __name__ == "__main__":
         "--data_aug_prob", type=float, default=0.0
     )  # set to probability of data augmentation (0.0 for no augmentation)
     parser.add_argument(
-        "--use_ego_obs", type=bool, default=False
-    )  # set to True to use ego observations
-    parser.add_argument(
-        "--use_depth", type=bool, default=False
+        "--use_depth", action="store_true"
     )  # set to True to use depth observations
+    parser.add_argument(
+        "--use_gripper", action="store_true"
+    )  # set to True to use gripper observations
     parser.add_argument(
         "--diffuse_on", type=str, default="pixel"
     )  # set to diffuse on pixel or dino features
