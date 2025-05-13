@@ -27,7 +27,7 @@ def get_paths_from_dir(dir_path):
 def assert_configs_equal(cfg1, cfg2, list_exception, path=""):
     if isinstance(cfg1, dict) and isinstance(cfg2, dict):
         assert cfg1.keys() == cfg2.keys(), (
-            f"Key mismatch at {path}: {cfg1.keys()} vs {cfg2.keys()}"
+            f"\n Key mismatch at {path}: {cfg1.keys()} vs {cfg2.keys()}"
         )
         for k in cfg1:
             new_path = f"{path}.{k}" if path else k
@@ -48,9 +48,19 @@ def assert_configs_equal(cfg1, cfg2, list_exception, path=""):
 def save_images(img, path: str, nrow: int = 1):
     if img.shape[1] == 3:  # RGB image
         utils.save_image(img, path, nrow=nrow)
-    else:  # RGB-D image
+    elif img.shape[1] == 4:  # RGB-D image
         rgb_image = img[:, :3, :, :]
         depth_image = img[:, 3:, :, :].expand(-1, 3, -1, -1)
         img = torch.cat((rgb_image, depth_image), dim=1)
         img = rearrange(img, "b (x c) h w -> (x b) c h w", x=2)
+        utils.save_image(img, path, nrow=nrow)
+    elif img.shape[1] == 6:  # RGB static + ego views
+        img = rearrange(img, "b (x c) h w -> (x b) c h w", c=3)
+        utils.save_image(img, path, nrow=nrow)
+    elif img.shape[1] == 8:  # RGB-D static + ego views
+        rgb_image = img[:, :6, :, :]
+        static_depth_image = img[:, 6:7, :, :].expand(-1, 3, -1, -1)
+        gripper_depth_image = img[:, 7:8, :, :].expand(-1, 3, -1, -1)
+        img = torch.cat((rgb_image, static_depth_image, gripper_depth_image), dim=1)
+        img = rearrange(img, "b (x c) h w -> (x b) c h w", c=3)
         utils.save_image(img, path, nrow=nrow)
