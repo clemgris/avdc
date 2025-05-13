@@ -77,8 +77,16 @@ def main(args):
                         "normalize_robot_orientation": True,
                     },
                     "obs_space": {
-                        "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
-                        "depth_obs": ["depth_static"] if args.use_depth else [],
+                        "rgb_obs": ["rgb_static", "rgb_gripper"]
+                        if args.use_gripper
+                        else ["rgb_static"],
+                        "depth_obs": (
+                            ["depth_static"]
+                            if (args.use_depth and not args.use_gripper)
+                            else ["depth_static", "depth_gripper"]
+                            if (args.use_depth and args.use_gripper)
+                            else []
+                        ),
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -110,10 +118,12 @@ def main(args):
         channel = 768
     elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
         target_size = (96, 96)
-        if "depth_static" in cfg.datamodule.lang_dataset.obs_space.depth_obs:
-            channel = 4
+        if cfg.datamodule.lang_dataset.obs_space.depth_obs != []:
+            # RGB-D
+            channel = 4 * len(cfg.datamodule.lang_dataset.obs_space.depth_obs)
         else:
-            channel = 3
+            # RGB
+            channel = 3 * len(cfg.datamodule.lang_dataset.obs_space.rgb_obs)
     else:
         raise ValueError(
             f"Diffusion type {cfg.datamodule.lang_dataset.diffuse_on} not supported."
@@ -585,6 +595,9 @@ if __name__ == "__main__":
         choices=["CLIP", "Flan-t5", "Siglip"],
     )  # set to text encoder type
     parser.add_argument("--use_depth", action="store_true")  # set to use depth images
+    parser.add_argument(
+        "--use_gripper", action="store_true"
+    )  # set to use gripper images
     args = parser.parse_args()
     if args.mode == "inference":
         assert args.checkpoint_num is not None
