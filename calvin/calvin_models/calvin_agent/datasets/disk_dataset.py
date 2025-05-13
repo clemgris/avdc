@@ -20,9 +20,12 @@ from calvin_agent.datasets.utils.episode_utils import (
     process_state,
 )
 from einops import rearrange
+from omegaconf import OmegaConf
 from torchvision.transforms import functional as F
 
 logger = logging.getLogger(__name__)
+
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def lookup_naming_pattern(
@@ -125,25 +128,24 @@ class DiskDiffusionDataset(BaseDataset):
         keys = list(chain(*self.observation_space.values()))
         keys.remove("language")
         keys.append("scene_obs")
-        episodes_idx = np.linspace(
+        frames_idx = np.linspace(
             start_idx,
             end_idx,
             min(self.max_window_size, self.num_subgoals + 1),
             dtype=int,
         )
-        episodes = [
-            self.load_file(self._get_episode_name(file_idx))
-            for file_idx in episodes_idx
+        frames = [
+            self.load_file(self._get_episode_name(file_idx)) for file_idx in frames_idx
         ]
 
-        episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
+        episode = {key: np.stack([ep[key] for ep in frames]) for key in keys}
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
             episode["task"] = self.lang_task[self.lang_lookup[idx]]
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
-                for file_idx in episodes_idx
+                for file_idx in frames_idx
             ]
             episode["dino_features"] = dino_features
         return episode
@@ -353,16 +355,12 @@ class DiskDiffusionDataset(BaseDataset):
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
 
-        if "depth_static" in sequence["depth_obs"].keys():
-            images = torch.cat(
-                [
-                    sequence["rgb_obs"]["rgb_static"],
-                    sequence["depth_obs"]["depth_static"],
-                ],
-                dim=1,
-            )
-        else:
-            images = sequence["rgb_obs"]["rgb_static"]
+        views = []
+        for key in sequence["rgb_obs"].keys():
+            views.append(sequence["rgb_obs"][key])
+        for key in sequence["depth_obs"].keys():
+            views.append(sequence["depth_obs"][key])
+        images = torch.cat(views, dim=1)
         dino_features = sequence["dino_features"]
 
         if self.with_dino_feat:
@@ -961,36 +959,23 @@ class DiskActionDataset(BaseDataset):
             sequence = self._pad_sequence(sequence, pad_size)
 
         if not self.with_dino_feat:
-            if "rgb_gripper" in sequence["rgb_obs"].keys():
-                start_image = torch.stack(
-                    [
-                        sequence["rgb_obs"]["rgb_gripper"][0],
-                        sequence["rgb_obs"]["rgb_static"][0],
-                    ]
-                )
-            elif "depth_static" in sequence["depth_obs"].keys():
-                start_image = torch.cat(
-                    [
-                        sequence["rgb_obs"]["rgb_static"][0],
-                        sequence["depth_obs"]["depth_static"][0],
-                    ],
-                    dim=0,
-                )[None]
-            else:
-                start_image = sequence["rgb_obs"]["rgb_static"][0][None]
+            views = []
+            for key in sequence["rgb_obs"].keys():
+                views.append(sequence["rgb_obs"][key][0])
+            for key in sequence["depth_obs"].keys():
+                views.append(sequence["depth_obs"][key][0])
+            start_image = torch.cat(views, dim=0)[None]
 
-            end_image = get_stochastic_augmentation(p=self.prob_data_aug)(
-                sequence["rgb_obs"]["rgb_static"][-1]
-            )[None]
-
-            if "depth_static" in sequence["depth_obs"].keys():
-                end_image = torch.cat(
-                    [
-                        end_image,
-                        sequence["depth_obs"]["depth_static"][-1][None],
-                    ],
-                    dim=1,
+            target_views = []
+            for key in sequence["rgb_obs"].keys():
+                target_views.append(
+                    get_stochastic_augmentation(p=self.prob_data_aug)(
+                        sequence["rgb_obs"][key][-1]
+                    )
                 )
+            for key in sequence["depth_obs"].keys():
+                target_views.append(sequence["depth_obs"][key][-1])
+            end_image = torch.cat(target_views, dim=0)[None]
 
         elif self.with_dino_feat:
             start_image = sequence["dino_features"][0][None]
@@ -1052,16 +1037,18 @@ class DiskEvaluatorDataset(BaseDataset):
             raise NotImplementedError
         self.pretrain = pretrain
         self.num_subgoals = num_subgoals
-        if self.with_lang:
-            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
-                self._build_file_indices_lang(self.abs_datasets_dir)
-            )
-        else:
-            self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
+        self.with_lang = True
+        self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
+            self._build_file_indices_lang(self.abs_datasets_dir)
+        )
 
         self.naming_pattern, self.n_digits = lookup_naming_pattern(
             self.abs_datasets_dir, self.save_format
         )
+
+        task2ann_path = root_path + "/conf/annotations/new_playtable.yaml"
+        print("Loading task2ann from: ", task2ann_path)
+        self.task2ann = OmegaConf.load(task2ann_path)
 
     def _get_episode_name(self, file_idx: int) -> Path:
         return Path(
@@ -1088,32 +1075,94 @@ class DiskEvaluatorDataset(BaseDataset):
         keys = list(chain(*self.observation_space.values()))
         keys.remove("language")
         keys.append("scene_obs")
-        if sucess == 1:
-            # Positive example
-            frame_idx = [start_idx, end_idx]
-        else:
-            # Negative example
-            # Select frame frome another episode which has a different goal
-            possible_episode_idx = np.where(
-                np.array(self.lang_lookup) != self.lang_lookup[idx]
-            )
-            episode_idx = np.random.choice(possible_episode_idx[0])
-            start_idx, end_idx, _ = self.episode_lookup[episode_idx]
-            neg_frame_idx = np.random.choice(range(start_idx, end_idx + 1))
-            frame_idx = [start_idx, neg_frame_idx]
+        # Positive example
+        frames_idx = np.linspace(
+            start_idx,
+            end_idx,
+            min(self.max_window_size, self.num_subgoals + 1),
+            dtype=int,
+        )
 
         frames = [
-            self.load_file(self._get_episode_name(file_idx)) for file_idx in frame_idx
+            self.load_file(self._get_episode_name(file_idx)) for file_idx in frames_idx
         ]
 
         episode = {key: np.stack([ep[key] for ep in frames]) for key in keys}
-        if self.with_lang:
+        if sucess == 1:
+            episode["task"] = self.lang_task[self.lang_lookup[idx]].replace("_", " ")
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
-            episode["task"] = self.lang_task[self.lang_lookup[idx]]
+        else:
+            true_task = self.lang_task[self.lang_lookup[idx]].replace("_", " ")
+            # Lifting
+            if "lift" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if "lift" in task and task != true_task
+                    ]
+                )
+            # Rotating
+            elif "rotate" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if "rotate" in task and task != true_task
+                    ]
+                )
+            # Pushing
+            elif "push" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if "push" in task and task != true_task
+                    ]
+                )
+            # Open/close
+            elif "move" in true_task or "close" in true_task or "open" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if ("move" in task or "close" in task or "open" in task)
+                        and task != true_task
+                    ]
+                )
+            # Place
+            elif "place" in true_task or "stack" in true_task or "unstack" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if ("place" in task or "stack" in task or "unstack" in task)
+                        and task != true_task
+                    ]
+                )
+            # Lightning
+            elif "led" in true_task or "lightbulb" in true_task:
+                filtered_tasks = set(
+                    [
+                        task
+                        for task in self.lang_task
+                        if ("led" in task or "lightbulb" in task) and task != true_task
+                    ]
+                )
+            else:
+                raise ValueError(f"Unknown task '{true_task}'")
+
+            # Select a random task from the filtered tasks
+            assert len(filtered_tasks) > 0
+
+            episode["task"] = random.choice(list(filtered_tasks))
+            false_ann = self.task2ann[episode["task"]]
+            episode["language"] = random.choice(false_ann)
+
         if self.with_dino_feat:
             dino_features = [
                 self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
-                for file_idx in frame_idx
+                for file_idx in frames_idx
             ]
             episode["dino_features"] = dino_features
         return episode, sucess
@@ -1187,10 +1236,11 @@ class DiskEvaluatorDataset(BaseDataset):
         seq_depth_obs = process_depth(episode, self.observation_space, self.transforms)
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
-        seq_lang = process_language(episode, self.transforms, self.with_lang)
         seq_feat = process_features(
             episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
         )
+        seq_lang = process_language(episode, self.transforms, self.with_lang)
+
         seq_dict = {
             **seq_state_obs,
             **seq_rgb_obs,
@@ -1219,18 +1269,18 @@ class DiskEvaluatorDataset(BaseDataset):
         if self.pad:
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
-        images = sequence["rgb_obs"]["rgb_static"]  # ["rgb_gripper"]
+        views = []
+        for key in sequence["rgb_obs"].keys():
+            views.append(sequence["rgb_obs"][key])
+        for key in sequence["depth_obs"].keys():
+            views.append(sequence["depth_obs"][key])
+        images = torch.cat(views, dim=0)
         dino_features = sequence["dino_features"]
-
         if self.with_dino_feat:
-            init = dino_features[0]
-            target = dino_features[1]
-        else:
-            init = images[0]
-            target = images[1]
+            images = dino_features
         # task = sequence["lang"]
         task = sequence["task"]
-        return init, target, task, sucess
+        return images, task, sucess
 
 
 class DiskDiffusionOracleDataset(BaseDataset):
