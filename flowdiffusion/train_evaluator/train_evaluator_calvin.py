@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from tqdm import tqdm
 
 root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root_path)
@@ -34,12 +35,9 @@ print(f"Total GPUs available: {torch.cuda.device_count()}")
 
 
 def main(args):
-    results_folder = "../results_evaluator_debug/calvin"
+    results_folder = Path(args.results_folder)
 
-    if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
-    else:
-        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+    data_path = args.data_path
 
     cfg = DictConfig(
         {
@@ -60,8 +58,16 @@ def main(args):
                         "normalize_robot_orientation": True,
                     },
                     "obs_space": {
-                        "rgb_obs": ["rgb_static"],  # ["rgb_gripper"]
-                        "depth_obs": [],
+                        "rgb_obs": ["rgb_static", "rgb_gripper"]
+                        if args.use_gripper
+                        else ["rgb_static"],
+                        "depth_obs": (
+                            ["depth_static"]
+                            if (args.use_depth and not args.use_gripper)
+                            else ["depth_static", "depth_gripper"]
+                            if (args.use_depth and args.use_gripper)
+                            else []
+                        ),
                         "state_obs": ["robot_obs"],
                         "actions": ["actions"],
                         "language": ["language"],
@@ -118,6 +124,10 @@ def main(args):
 
     tokenizer = CLIPTokenizer.from_pretrained(pretrained_model)
     text_encoder = CLIPTextModel.from_pretrained(pretrained_model)
+
+    # Freeze text encoder
+    for param in text_encoder.parameters():
+        param.requires_grad = False
     text_encoder.requires_grad_(False)
     text_encoder.eval()
 
@@ -129,7 +139,7 @@ def main(args):
     # Number of parameters
     print(
         "Number of parameters:",
-        sum(p.numel() for p in evaluator.parameters() if p.requires_grad),
+        sum(p.numel() for p in evaluator.parameters()),
     )
     print(
         "Number of trainable parameters:",
@@ -142,7 +152,7 @@ def main(args):
     train_dataloader = torch.utils.data.DataLoader(
         train_set,
         num_workers=4,
-        batch_size=64,
+        batch_size=args.batch_size,
         shuffle=True,
         pin_memory=device != torch.device("cpu"),
         drop_last=True,
@@ -151,7 +161,7 @@ def main(args):
     val_dataloader = torch.utils.data.DataLoader(
         valid_set,
         num_workers=4,
-        batch_size=64,
+        batch_size=args.batch_size,
         shuffle=False,
         pin_memory=device != torch.device("cpu"),
         drop_last=True,
@@ -161,9 +171,10 @@ def main(args):
     for epoch in range(num_epochs):
         all_losses = []
         all_metric = []
-        for batch in train_dataloader:
-            target, text_task, sucess = batch
-            pred_loggits = evaluator(target.to(device), text_task)
+        for batch in tqdm(train_dataloader, desc="Training", leave=False):
+            episode, text_task, sucess = batch
+            breakpoint()
+            pred_loggits = evaluator(episode.to(device), text_task)
 
             # Loss
             loss = criterion(pred_loggits, sucess.to(device))
@@ -194,8 +205,8 @@ def main(args):
             all_eval_losses = []
             all_eval_metric = []
             for batch in val_dataloader:
-                target, text_task, sucess = batch
-                pred_loggits = evaluator(target.to(device), text_task)
+                episode, text_task, sucess = batch
+                pred_loggits = evaluator(episode.to(device), text_task)
 
                 # Loss
                 loss = criterion(pred_loggits, sucess.to(device))
@@ -222,6 +233,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "-c", "--checkpoint_num", type=int, default=None
     )  # set to checkpoint number to resume training or generate samples
-
+    parser.add_argument(
+        "-r", "--results_folder", type=str, default="../results_evaluator_debug/calvin"
+    )  # set to results folder to resume training or generate samples
+    parser.add_argument(
+        "--data_path",
+        type=str,
+        default="/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset",
+    )  # set to data path to resume training or generate samples
+    parser.add_argument(
+        "--batch_size", type=int, default=64
+    )  # set to batch size to resume training or generate samples
+    parser.add_argument("--use_depth", action="store_true")  # use depth images
+    parser.add_argument("--use_gripper", action="store_true")  # use gripper images
     args = parser.parse_args()
     main(args)
