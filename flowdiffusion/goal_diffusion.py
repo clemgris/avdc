@@ -900,7 +900,7 @@ class Trainer(object):
         if self.accelerator.is_main_process:
             print(f"Number of input channels: {self.in_channels}")
 
-        if self.in_channels > 4:
+        if self.in_channels > 10:
             self.feature_decoder = feature_decoder
             self.features_stats = dino_stats
             self.norm_feat = norm_feat
@@ -1167,7 +1167,7 @@ class Trainer(object):
                             gt_img = rearrange(
                                 gt_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                             )
-                            if self.in_channels > 4:
+                            if self.in_channels > 10:
                                 gt_img = rearrange(
                                     gt_img,
                                     "(b n) c h w -> (b n) (h w) c ",
@@ -1222,7 +1222,7 @@ class Trainer(object):
                         pred_img = rearrange(
                             pred_img, "b n c h w -> (b n) c h w", n=n_rows + 1
                         )
-                        if self.in_channels > 4:
+                        if self.in_channels > 10:
                             pred_img = rearrange(
                                 pred_img, "(b n) c h w -> (b n) (h w) c ", n=n_rows + 1
                             )
