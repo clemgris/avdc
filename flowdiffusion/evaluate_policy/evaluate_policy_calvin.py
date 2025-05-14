@@ -259,7 +259,43 @@ class CustomModel(CalvinBaseModel):
 
         # Orcale subgoals
         if self.use_oracle_subgoals:
-            self.sub_goals = oracle_subgoals["rgb_obs"]["rgb_static"][1:][None]
+            subgoals_views_static = []
+            subgoals_views_gripper = []
+            for key in oracle_subgoals["rgb_obs"].keys():
+                if key == "rgb_static":
+                    subgoals_views_static.append(oracle_subgoals["rgb_obs"][key][1:])
+                elif key == "rgb_gripper":
+                    subgoals_views_gripper.append(oracle_subgoals["rgb_obs"][key][1:])
+            for key in oracle_subgoals["depth_obs"].keys():
+                if key == "depth_static":
+                    subgoals_views_static.append(oracle_subgoals["depth_obs"][key][1:])
+                elif key == "depth_gripper":
+                    subgoals_views_gripper.append(oracle_subgoals["depth_obs"][key][1:])
+
+            assert len(subgoals_views_static) > 0 or len(subgoals_views_gripper) > 0
+
+            subgoals_image_static = (
+                torch.cat(subgoals_views_static, dim=1)
+                if len(subgoals_views_static) > 0
+                else None
+            )
+            subgoals_image_gripper = (
+                torch.cat(subgoals_views_gripper, dim=1)
+                if len(subgoals_views_gripper) > 0
+                else None
+            )
+
+            self.sub_goals = (
+                torch.cat(
+                    [
+                        subgoals_image_static[:, None],
+                        subgoals_image_gripper[:, None],
+                    ],
+                    dim=-4,
+                )
+                if len(subgoals_views_gripper) > 0
+                else subgoals_image_static[:, None]
+            )[None].to(self.device)
 
             if self.debug:
                 # Save subgoals
@@ -314,26 +350,37 @@ class CustomModel(CalvinBaseModel):
                     self.steps // self.sample_action_every, self.sub_goals.shape[1] - 1
                 )
 
-            target = self.sub_goals[:, sub_goal_idx].to(self.device)
-            # init = obs["rgb_obs"]["rgb_static"][0, 0]
-            if "rgb_gripper" in obs["rgb_obs"].keys():
-                init = torch.stack(
-                    [
-                        obs["rgb_obs"]["rgb_gripper"][0, 0],
-                        obs["rgb_obs"]["rgb_static"][0, 0],
-                    ]
-                )
-            elif "depth_static" in obs["depth_obs"].keys():
-                init = torch.cat(
-                    [
-                        obs["rgb_obs"]["rgb_static"][0, 0],
-                        obs["depth_obs"]["depth_static"][0, 0],
-                    ],
-                    dim=0,
-                )[None]
-            else:
-                init = obs["rgb_obs"]["rgb_static"][0]
+            target = self.sub_goals[:, sub_goal_idx]
+            views_static = []
+            views_gripper = []
+            for key in obs["rgb_obs"].keys():
+                if key == "rgb_static":
+                    views_static.append(obs["rgb_obs"][key][0])
+                elif key == "rgb_gripper":
+                    views_gripper.append(obs["rgb_obs"][key][0])
+            for key in obs["depth_obs"].keys():
+                if key == "depth_static":
+                    views_static.append(obs["depth_obs"][key][0])
+                elif key == "depth_gripper":
+                    views_gripper.append(obs["depth_obs"][key][0])
 
+            assert len(views_static) > 0 or len(views_gripper) > 0
+
+            start_image_static = (
+                torch.cat(views_static, dim=1) if len(views_static) > 0 else None
+            )
+            start_image_gripper = (
+                torch.cat(views_gripper, dim=1) if len(views_gripper) > 0 else None
+            )
+
+            init = (
+                torch.cat(
+                    [start_image_static[:, None], start_image_gripper[:, None]],
+                    dim=-4,
+                )
+                if len(views_gripper) > 0
+                else start_image_static[:, None]
+            ).to(self.device)
             obs_goal_images = torch.cat([init, target], dim=0)
 
             # Save initial and target frames
@@ -346,7 +393,7 @@ class CustomModel(CalvinBaseModel):
             state = torch.zeros((obs_goal_images.shape[0], 0)).to(self.device)
             obs_goal = {
                 "observation.state": state[None],
-                "observation.images": obs_goal_images[None, :, None, ...],
+                "observation.images": obs_goal_images[None],
             }
             # Predict action
             with torch.inference_mode():
@@ -620,9 +667,12 @@ if __name__ == "__main__":
     policy_data_config = OmegaConf.load(
         os.path.join(args.policy_results_folder, "data_config.yaml")
     )
-    high_level_data_config = OmegaConf.load(
-        os.path.join(args.high_level_results_folder, "data_config.yaml")
-    )
+    if not args.use_oracle_subgoals:
+        high_level_data_config = OmegaConf.load(
+            os.path.join(args.high_level_results_folder, "data_config.yaml")
+        )
+    else:
+        high_level_data_config = {}
     config = DictConfig(
         {
             "policy": {
@@ -671,14 +721,12 @@ if __name__ == "__main__":
     else:
         raise ValueError("Invalid server argument")
 
-    # load high level config
-    high_level_data_config.datamodule.lang_dataset._target_ = (
+    # load low level config
+    policy_data_config.datamodule.lang_dataset._target_ = (
         "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset"
     )
-    high_level_data_config.datamodule.lang_dataset.obs_space.rgb_obs = (
-        policy_data_config.datamodule.lang_dataset.obs_space.rgb_obs
-    )
-    high_level_data_config.root = data_path
+    del policy_data_config.datamodule.lang_dataset.prob_aug
+    policy_data_config.root = data_path
 
     transforms_dict = OmegaConf.load(
         os.path.join(
@@ -688,9 +736,9 @@ if __name__ == "__main__":
     )
 
     data_module = CalvinDataModule(
-        high_level_data_config.datamodule,
+        policy_data_config.datamodule,
         transforms=transforms_dict,
-        root_data_dir=high_level_data_config.root,
+        root_data_dir=policy_data_config.root,
     )
     data_module.setup()
 

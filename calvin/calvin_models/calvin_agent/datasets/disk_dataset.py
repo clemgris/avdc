@@ -965,12 +965,12 @@ class DiskActionDataset(BaseDataset):
                 if key == "rgb_static":
                     views_static.append(sequence["rgb_obs"][key][0])
                 elif key == "rgb_gripper":
-                    views_gripper.append(sequence["rgb_obs"][key][-1])
+                    views_gripper.append(sequence["rgb_obs"][key][0])
             for key in sequence["depth_obs"].keys():
                 if key == "depth_static":
                     views_static.append(sequence["depth_obs"][key][0])
                 elif key == "depth_gripper":
-                    views_gripper.append(sequence["depth_obs"][key][-1])
+                    views_gripper.append(sequence["depth_obs"][key][0])
 
             assert len(views_static) > 0 or len(views_gripper) > 0
 
