@@ -98,7 +98,7 @@ def main(args):
                     "feat_patch_size": args.feat_patch_size,
                 },
             },
-            "training_steps": 500000,  # In gradient steps
+            "training_steps": args.training_steps,  # In gradient steps
             "save_every": 100,  # In gradient steps
         }
     )
@@ -165,6 +165,7 @@ def main(args):
             "input_normalization_modes": {},
             "output_normalization_modes": {"action": "min_max"},
             "crop_shape": None,
+            "vision_backbone": "resnet18" if args.diffuse_on == "pixel" else "identity",
         }
     )
 
@@ -293,7 +294,7 @@ if __name__ == "__main__":
         "-c", "--checkpoint_num", type=int, default=None
     )  # set to checkpoint number to resume training or generate samples
     parser.add_argument(
-        "--training_steps", type=int, default=150000
+        "--training_steps", type=int, default=500000
     )  # set to number of training steps
     parser.add_argument(
         "--data_path",
