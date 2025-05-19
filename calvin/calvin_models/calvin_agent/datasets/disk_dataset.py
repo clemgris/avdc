@@ -1042,14 +1042,19 @@ class DiskActionDataset(BaseDataset):
                 h=self.feat_patch_size,
             )
 
-        actions = sequence["actions"][:-1]
+            start_end_images_static = torch.cat([start_image, end_image], dim=0)
+            state = torch.zeros((start_end_images_static.shape[0], 0))
 
-        # Stack start and end images
+            views_static = [start_image]
+            views_gripper = []
+
         state = (
             torch.zeros((start_end_images_static.shape[0], 0))
             if len(views_static) > 0
             else torch.zeros((start_end_images_gripper.shape[0], 0))
         )
+
+        actions = sequence["actions"][:-1]
         action_is_pad = torch.zeros_like(actions)
 
         res = {
