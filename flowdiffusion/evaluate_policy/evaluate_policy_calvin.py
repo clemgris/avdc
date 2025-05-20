@@ -553,7 +553,7 @@ def rollout(
         # Save subgoals
         for kk, subgoal in enumerate(subgoals):
             model.save_image(
-                subgoal,
+                subgoal[:, 0, ...],
                 f"failed_{task.replace(' ', '_')}_{episode['idx']}/subgoals_{kk}.png",
             )
         # Save episode (as gif)
