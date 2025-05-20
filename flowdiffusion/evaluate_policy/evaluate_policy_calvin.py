@@ -91,7 +91,7 @@ class CustomModel(CalvinBaseModel):
                 )
             )
         else:
-            print(f"Policy checkpoint not found at {policy_checkpoint_path}")
+            raise ValueError(f"Policy checkpoint not found at {policy_checkpoint_path}")
         self.policy.eval()
         self.policy.to(self.device)
 
@@ -713,7 +713,7 @@ if __name__ == "__main__":
     args.ep_len = 240
 
     if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D"
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D_jz"
         rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
     elif args.server == "hacienda":
         data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
