@@ -350,7 +350,7 @@ class CustomModel(CalvinBaseModel):
                     self.steps // self.sample_action_every, self.sub_goals.shape[1] - 1
                 )
 
-            target = self.sub_goals[:, sub_goal_idx]
+            target = self.sub_goals[:, sub_goal_idx].to(self.device)
             views_static = []
             views_gripper = []
             for key in obs["rgb_obs"].keys():
