@@ -660,7 +660,7 @@ def rollout(
         os.makedirs(debug_path, exist_ok=True)
         failure_idx = len(os.listdir(debug_path))
         failed_episode_path = os.path.join(
-            debug_path, f"failed_{subtask.replace(' ', '_')}_{failure_idx}"
+            debug_path, f"failures/failed_{subtask.replace(' ', '_')}_{failure_idx}"
         )
         os.makedirs(
             failed_episode_path,
@@ -670,7 +670,7 @@ def rollout(
         model.save_image(
             torch.stack(obs_list),
             os.path.join(
-                f"failed_{subtask.replace(' ', '_')}_{failure_idx}",
+                f"failures/failed_{subtask.replace(' ', '_')}_{failure_idx}",
                 "trajectory.png",
             ),
         )
@@ -685,7 +685,7 @@ def rollout(
             model.save_image(
                 subgoal[:, 0, ...],
                 os.path.join(
-                    f"failed_{subtask.replace(' ', '_')}_{failure_idx}",
+                    f"failures/failed_{subtask.replace(' ', '_')}_{failure_idx}",
                     f"subgoals_{kk}.png",
                 ),
             )
