@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from einops import rearrange
+from r3m import load_r3m
 from transformers import (
     AutoImageProcessor,
     AutoModel,
@@ -29,9 +30,7 @@ class DinoV2Encoder(nn.Module):
 
 
 class ViTEncoder(nn.Module):
-    def __init__(
-        self, name="vit_base_patch14_dinov2.lvd142m", image_size=224, device="cuda"
-    ):
+    def __init__(self, name="vit_base_patch14_dinov2.lvd142m", device="cuda"):
         super().__init__()
         self.backbone = PretrainedViTWrapper(name=name, norm=True)
         self.backbone = self.backbone.to(device)
@@ -40,3 +39,17 @@ class ViTEncoder(nn.Module):
         patch_emb = self.backbone(x).detach()
         patch_emb = rearrange(patch_emb, "b c h w -> b (h w) c")
         return None, patch_emb
+
+
+class R3MEncoder(nn.Module):
+    def __init__(self, name="resnet50", device="cuda"):
+        super().__init__()
+        r3m = load_r3m(name).to(device)
+        r3m.eval()
+        resnet_backbone = r3m.module.convnet
+        self.patch_encoder = nn.Sequential(*list(resnet_backbone.children())[:-2])
+
+    def forward(self, x):
+        x = self.patch_encoder(x)
+        x = rearrange(x, "b c h w -> b (h w) c")
+        return None, x

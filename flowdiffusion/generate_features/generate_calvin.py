@@ -18,8 +18,7 @@ sys.path.append(
         "flowdiffusion",
     )
 )
-
-from encoder import DinoV2Encoder, ViTEncoder
+from encoder import DinoV2Encoder, R3MEncoder, ViTEncoder  # noqa: E402
 
 sys.path.append(
     os.path.join(
@@ -84,6 +83,14 @@ def main(args):
                 "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
             )
         )
+    elif args.features == "r3m":
+        print("Using r3m features with transform from play_features_extract.yaml")
+        transforms = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
+            )
+        )
 
     if "dino" in args.features:
         for section in ["train", "val"]:
@@ -103,6 +110,24 @@ def main(args):
                     ):
                         print(f"CenterCrop {section} to", args.patch_size * 14)
                         transform["size"] = args.patch_size * 14
+    elif args.features == "r3m":
+        for section in ["train", "val"]:
+            if hasattr(transforms, section) and hasattr(
+                transforms[section], "rgb_static"
+            ):
+                for transform in transforms[section].rgb_static:
+                    if (
+                        "_target_" in transform
+                        and transform["_target_"] == "torchvision.transforms.Resize"
+                    ):
+                        print(f"Resize {section} to", args.patch_size * 32)
+                        transform["size"] = args.patch_size * 32
+                    elif (
+                        "_target_" in transform
+                        and transform["_target_"] == "torchvision.transforms.CenterCrop"
+                    ):
+                        print(f"CenterCrop {section} to", args.patch_size * 32)
+                        transform["size"] = args.patch_size * 32
 
     os.makedirs(
         os.path.join(cfg.root, f"training/features_{args.features}_{args.patch_size}"),
@@ -153,6 +178,7 @@ def main(args):
     # Frozen encoder model
 
     if args.features == "dino":
+        num_channels = 768
         if args.server == "hacienda":
             encoder_model = DinoV2Encoder(
                 name="facebook/dinov2-base",
@@ -164,28 +190,26 @@ def main(args):
         else:
             raise ValueError(f"Unknown server {args.server}")
     elif args.features == "dino_vit":
-        if args.server == "hacienda":
-            encoder_model = ViTEncoder()
-        elif args.server == "jz":
-            encoder_model = ViTEncoder()
-        else:
-            raise ValueError(f"Unknown server {args.server}")
+        num_channels = 768
+        encoder_model = ViTEncoder()
+    elif args.features == "r3m":
+        num_channels = 512
+        encoder_model = R3MEncoder("resnet18")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
 
     # Init stats
-    sum = torch.zeros((args.patch_size**2, 768))
-    sum_squared = torch.zeros((args.patch_size**2, 768))
-    min = torch.ones((args.patch_size**2, 768)) * 1e10
-    max = torch.ones((args.patch_size**2, 768)) * -1e10
+    sum = torch.zeros((args.patch_size**2, num_channels))
+    sum_squared = torch.zeros((args.patch_size**2, num_channels))
+    min = torch.ones((args.patch_size**2, num_channels)) * 1e10
+    max = torch.ones((args.patch_size**2, num_channels)) * -1e10
 
     for data in tqdm(
         train_loader, desc=f"Generate {args.features} features of training data"
     ):
         frame_idx, image, _ = data
         _, patch_emb = encoder_model(image.to("cuda"))
-        patch_emb = patch_emb.cpu()
-
+        patch_emb = patch_emb.detach().cpu()
         for i in range(len(frame_idx)):
             all_emb = {}
             all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
@@ -233,7 +257,7 @@ def main(args):
     ):
         frame_idx, image, _ = data
         _, patch_emb = encoder_model(image.to("cuda"))
-        patch_emb = patch_emb.cpu()
+        patch_emb = patch_emb.detach().cpu()
 
         for i in range(len(frame_idx)):
             eval_emb = {}
