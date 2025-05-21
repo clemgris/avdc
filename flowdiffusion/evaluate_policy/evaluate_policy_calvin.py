@@ -310,7 +310,7 @@ class CustomModel(CalvinBaseModel):
         else:
             # Generate sequence of subgoals
             sample_subgoals = (
-                self.steps % model.ref_traj_length == 0
+                self.steps % self.ref_traj_length == 0
                 if self.replan
                 else self.steps == 0
             )
@@ -743,10 +743,10 @@ if __name__ == "__main__":
 
     if args.test_on == "train":
         dataloader = data_module.train_dataloader()
-        high_level_dataset = dataloader["lang"].dataset
+        policy_dataset = dataloader["lang"].dataset
     elif args.test_on == "val":
         dataloader = data_module.val_dataloader()
-        high_level_dataset = dataloader.dataset.datasets["lang"]
+        policy_dataset = dataloader.dataset.datasets["lang"]
     else:
         raise ValueError("Invalid test_on argument")
 
@@ -761,8 +761,8 @@ if __name__ == "__main__":
 
     rollout_cfg = OmegaConf.load(rollout_cfg_path)
     env = hydra.utils.instantiate(
-        rollout_cfg.env_cfg, high_level_dataset, device, show_gui=False
+        rollout_cfg.env_cfg, policy_dataset, device, show_gui=False
     )
     model = CustomModel(config)
 
-    evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
+    evaluate_policy_singlestep(model, env, policy_dataset, args, checkpoint)
