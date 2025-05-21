@@ -179,7 +179,7 @@ class CustomModel(CalvinBaseModel):
             )
             unet = unet.to(self.device)
 
-            sample_per_seq = 8
+            sample_per_seq = cfg.num_subgoals + 1
             self.sample_steps = 100
 
             diffusion = GoalGaussianDiffusion(
@@ -296,7 +296,6 @@ class CustomModel(CalvinBaseModel):
                 if len(subgoals_views_gripper) > 0
                 else subgoals_image_static[:, None]
             )[None].to(self.device)
-
             if self.debug:
                 # Save subgoals
                 self.save_image(
@@ -331,7 +330,7 @@ class CustomModel(CalvinBaseModel):
                     self.sub_goals,
                     "b (f c) w h -> b f c w h",
                     c=self.high_level_channels,
-                )
+                )[:, :, None, ...]
                 if self.debug:
                     # Save subgoals
                     self.save_image(
