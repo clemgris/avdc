@@ -68,6 +68,7 @@ def main(args):
     )
 
     if args.features == "dino":
+        assert args.patch_size % 16 == 0, "Dino patch size must be a multiple of 16"
         print("Using dino features with transform from play_nothing.yaml")
         transforms = OmegaConf.load(
             os.path.join(
@@ -76,6 +77,7 @@ def main(args):
             )
         )
     elif args.features == "dino_vit":
+        assert args.patch_size % 16 == 0, "Dino patch size must be a multiple of 16"
         print("Using dino_vit features with transform from play_features_extract.yaml")
         transforms = OmegaConf.load(
             os.path.join(
@@ -84,6 +86,7 @@ def main(args):
             )
         )
     elif args.features == "r3m":
+        assert args.patch_size % 7 == 0, "Dino patch size must be a multiple of 7"
         print("Using r3m features with transform from play_features_extract.yaml")
         transforms = OmegaConf.load(
             os.path.join(
@@ -129,21 +132,6 @@ def main(args):
                         print(f"CenterCrop {section} to", args.patch_size * 32)
                         transform["size"] = args.patch_size * 32
 
-    os.makedirs(
-        os.path.join(cfg.root, f"training/features_{args.features}_{args.patch_size}"),
-        exist_ok=True,
-    )
-    os.makedirs(
-        os.path.join(
-            cfg.root, f"validation/features_{args.features}_{args.patch_size}"
-        ),
-        exist_ok=True,
-    )
-    with open(
-        os.path.join(cfg.root, f"{args.features}_{args.patch_size}_config.yaml"), "w"
-    ) as file:
-        file.write(OmegaConf.to_yaml(cfg))
-
     data_module = CalvinDataModule(
         cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
     )
@@ -176,7 +164,6 @@ def main(args):
     )
 
     # Frozen encoder model
-
     if args.features == "dino":
         num_channels = 768
         if args.server == "hacienda":
@@ -197,6 +184,22 @@ def main(args):
         encoder_model = R3MEncoder("resnet18")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
+
+    # Create storing directories
+    os.makedirs(
+        os.path.join(cfg.root, f"training/features_{args.features}_{args.patch_size}"),
+        exist_ok=True,
+    )
+    os.makedirs(
+        os.path.join(
+            cfg.root, f"validation/features_{args.features}_{args.patch_size}"
+        ),
+        exist_ok=True,
+    )
+    with open(
+        os.path.join(cfg.root, f"{args.features}_{args.patch_size}_config.yaml"), "w"
+    ) as file:
+        file.write(OmegaConf.to_yaml(cfg))
 
     # Init stats
     sum = torch.zeros((args.patch_size**2, num_channels))
