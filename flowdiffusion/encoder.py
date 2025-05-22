@@ -44,7 +44,8 @@ class ViTEncoder(nn.Module):
 class R3MEncoder(nn.Module):
     def __init__(self, name="resnet50", device="cuda"):
         super().__init__()
-        r3m = load_r3m(name).to(device)
+        r3m = load_r3m(name)
+        r3m = r3m.to(device)
         r3m.eval()
         resnet_backbone = r3m.module.convnet
         self.patch_encoder = nn.Sequential(*list(resnet_backbone.children())[:-2])
