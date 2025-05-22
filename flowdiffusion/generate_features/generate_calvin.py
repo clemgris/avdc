@@ -213,13 +213,6 @@ def main(args):
         frame_idx, image, _ = data
         _, patch_emb = encoder_model(image.to("cuda"))
         patch_emb = patch_emb.detach().cpu()
-        import torchvision
-        from vis_features import pca_project_features
-
-        torchvision.utils.save_image(
-            pca_project_features(patch_emb), f"R3Mfeatures_{args.patch_size}.png"
-        )
-        breakpoint()
         for i in range(len(frame_idx)):
             all_emb = {}
             all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
