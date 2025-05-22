@@ -63,7 +63,7 @@ def main(args):
                     "_target_": "calvin_agent.datasets.disk_dataset.DiskActionDataset",
                     "key": dataset_key,
                     "save_format": "npz",
-                    "batch_size": 32,
+                    "batch_size": args.batch_size,
                     "min_window_size": 32,
                     "max_window_size": 65,
                     "proprio_state": {
@@ -233,11 +233,13 @@ def main(args):
     # Create dataloader for offline training.
     dataloader = torch.utils.data.DataLoader(
         train_set,
-        num_workers=4,
+        num_workers=4 if args.server == "hacienda" else 16,
         batch_size=cfg.datamodule[dataset_name]["batch_size"],
         shuffle=True,
         pin_memory=device != torch.device("cpu"),
         drop_last=True,
+        persistent_workers=True,
+        prefetch_factor=4,
     )
 
     # Run training loop.
@@ -328,5 +330,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--norm", type=str, default=None, choices=[None, "l2", "z_score", "min_max"]
     )  # set to normalisation type for features
+    parser.add_argument(
+        "--batch_size", type=int, default=32
+    )  # set to batch size for training
     args = parser.parse_args()
     main(args)
