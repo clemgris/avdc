@@ -132,37 +132,6 @@ def main(args):
                         print(f"CenterCrop {section} to", args.patch_size * 32)
                         transform["size"] = args.patch_size * 32
 
-    data_module = CalvinDataModule(
-        cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
-    )
-
-    data_module.setup()
-
-    train_set = data_module.train_datasets["vis"]
-    valid_set = data_module.val_datasets["vis"]
-
-    print("Train data (img):", len(train_set))
-    print("Valid data (img):", len(valid_set))
-
-    # Create dataloaders
-    train_loader = torch.utils.data.DataLoader(
-        train_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True,
-    )
-
-    valid_loader = torch.utils.data.DataLoader(
-        valid_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True,
-    )
-
     # Frozen encoder model
     if args.features == "dino":
         num_channels = 768
@@ -184,6 +153,37 @@ def main(args):
         encoder_model = R3MEncoder("resnet18")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
+
+    # Create datamodule
+    data_module = CalvinDataModule(
+        cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
+    )
+
+    data_module.setup()
+
+    train_set = data_module.train_datasets["vis"]
+    valid_set = data_module.val_datasets["vis"]
+
+    print("Train data (img):", len(train_set))
+    print("Valid data (img):", len(valid_set))
+
+    train_loader = torch.utils.data.DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True,
+    )
+
+    valid_loader = torch.utils.data.DataLoader(
+        valid_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True,
+    )
 
     # Create storing directories
     os.makedirs(
