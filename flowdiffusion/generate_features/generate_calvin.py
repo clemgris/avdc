@@ -78,20 +78,20 @@ def main(args):
         )
     elif args.features == "dino_vit":
         assert args.patch_size % 16 == 0, "Dino patch size must be a multiple of 16"
-        print("Using dino_vit features with transform from play_features_extract.yaml")
+        print("Using dino_vit features with transform from play_features_imagenet.yaml")
         transforms = OmegaConf.load(
             os.path.join(
                 root_path,
-                "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
+                "calvin/calvin_models/conf/datamodule/transforms/play_features_imagenet.yaml",
             )
         )
     elif args.features == "r3m":
         assert args.patch_size % 7 == 0, "Dino patch size must be a multiple of 7"
-        print("Using r3m features with transform from play_features_extract.yaml")
+        print("Using r3m features with transform from play_features_imagenet.yaml")
         transforms = OmegaConf.load(
             os.path.join(
                 root_path,
-                "calvin/calvin_models/conf/datamodule/transforms/play_features_extract.yaml",
+                "calvin/calvin_models/conf/datamodule/transforms/play_features_imagenet.yaml",
             )
         )
 
@@ -132,6 +132,37 @@ def main(args):
                         print(f"CenterCrop {section} to", args.patch_size * 32)
                         transform["size"] = args.patch_size * 32
 
+    data_module = CalvinDataModule(
+        cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
+    )
+
+    data_module.setup()
+
+    train_set = data_module.train_datasets["vis"]
+    valid_set = data_module.val_datasets["vis"]
+
+    print("Train data (img):", len(train_set))
+    print("Valid data (img):", len(valid_set))
+
+    # Create dataloaders
+    train_loader = torch.utils.data.DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True,
+    )
+
+    valid_loader = torch.utils.data.DataLoader(
+        valid_set,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True,
+    )
+
     # Frozen encoder model
     if args.features == "dino":
         num_channels = 768
@@ -153,37 +184,6 @@ def main(args):
         encoder_model = R3MEncoder("resnet18")
     else:
         raise ValueError(f"Unknown feature type {args.features}")
-
-    # Create datamodule
-    data_module = CalvinDataModule(
-        cfg.datamodule, transforms=transforms, root_data_dir=cfg.root
-    )
-
-    data_module.setup()
-
-    train_set = data_module.train_datasets["vis"]
-    valid_set = data_module.val_datasets["vis"]
-
-    print("Train data (img):", len(train_set))
-    print("Valid data (img):", len(valid_set))
-
-    train_loader = torch.utils.data.DataLoader(
-        train_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True,
-    )
-
-    valid_loader = torch.utils.data.DataLoader(
-        valid_set,
-        batch_size=args.batch_size,
-        shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True,
-    )
 
     # Create storing directories
     os.makedirs(
@@ -213,6 +213,13 @@ def main(args):
         frame_idx, image, _ = data
         _, patch_emb = encoder_model(image.to("cuda"))
         patch_emb = patch_emb.detach().cpu()
+        import torchvision
+        from vis_features import pca_project_features
+
+        torchvision.utils.save_image(
+            pca_project_features(patch_emb), f"R3Mfeatures_{args.patch_size}.png"
+        )
+        breakpoint()
         for i in range(len(frame_idx)):
             all_emb = {}
             all_emb["patch_emb"] = patch_emb[i].cpu().numpy()
