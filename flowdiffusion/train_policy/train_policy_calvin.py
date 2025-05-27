@@ -242,7 +242,7 @@ def main(args):
     # Create dataloader for offline training.
     dataloader = torch.utils.data.DataLoader(
         train_set,
-        num_workers=4 if args.server == "hacienda" else 16,
+        num_workers=4 if args.server == "hacienda" else 8,
         batch_size=cfg.datamodule[dataset_name]["batch_size"],
         shuffle=True,
         pin_memory=device != torch.device("cpu"),
