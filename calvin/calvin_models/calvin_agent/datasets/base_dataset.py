@@ -66,7 +66,7 @@ class BaseDataset(Dataset):
         pad: bool = True,
         aux_lang_loss_window: int = 1,
         diffuse_on: str = "pixel",
-        norm_dino_feat: bool = False,
+        norm_feat: bool = False,
         feat_patch_size: int = 16,
     ):
         self.feat_patch_size = feat_patch_size
@@ -74,7 +74,7 @@ class BaseDataset(Dataset):
         self.proprio_state = proprio_state
         self.transforms = transforms
         self.with_lang = key == "lang"
-        self.with_dino_feat = diffuse_on != "pixel"
+        self.with_feat = diffuse_on != "pixel"
         self.diffuse_on = diffuse_on
         self.relative_actions = "rel_actions" in self.observation_space["actions"]
 
@@ -95,16 +95,16 @@ class BaseDataset(Dataset):
         logger.info(f"loading dataset at {self.abs_datasets_dir}")
         logger.info("finished loading dataset")
 
-        self.dino_stats_path = self.abs_datasets_dir / f"../{self.diffuse_on}_stats.pt"
-        if os.path.exists(self.dino_stats_path):
-            self.dino_stats = torch.load(self.dino_stats_path)["dino_features"]
+        self.feat_stats_path = self.abs_datasets_dir / f"../{self.diffuse_on}_stats.pt"
+        if os.path.exists(self.feat_stats_path):
+            self.feat_stats = torch.load(self.feat_stats_path)["dino_features"]
         else:
-            self.dino_stats = None
+            self.feat_stats = None
             assert self.diffuse_on == "pixel", (
-                f"Cannot diffuse on {self.diffuse_on} without dino stats file, not found in {self.dino_stats_path}."
+                f"Cannot diffuse on {self.diffuse_on} without dino stats file, not found in {self.feat_stats_path}."
             )
 
-        self.norm_dino_feat = norm_dino_feat
+        self.norm_feat = norm_feat
 
     def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
         raise NotImplementedError

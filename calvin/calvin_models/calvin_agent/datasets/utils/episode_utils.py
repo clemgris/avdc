@@ -100,49 +100,35 @@ def process_rgb(
 
 def process_features(
     episode: Dict[str, np.ndarray],
-    with_dino_feat: bool,
-    dino_stats: Dict[str, torch.Tensor] | None,
-    norm_dino_feat: str | None,
+    with_feat: bool,
+    feat_stats: Dict[str, torch.Tensor] | None,
+    norm_feat: str | None,
 ) -> Dict[str, Dict[str, torch.Tensor]]:
-    seq_dino_feat = {"dino_features": torch.empty(0)}
-    if with_dino_feat:
-        seq_dino_feat_ = torch.tensor(np.array(episode["dino_features"]))
-        if norm_dino_feat is not None:
-            if dino_stats is not None:
-                if norm_dino_feat == "l2":
-                    seq_dino_feat_ = F.normalize(seq_dino_feat_, p=2, dim=-1)
-                elif norm_dino_feat == "z_score":
+    seq_feat = {"features": torch.empty(0)}
+    if with_feat:
+        seq_feat_ = torch.tensor(np.array(episode["features"]))
+        if norm_feat is not None:
+            if feat_stats is not None:
+                if norm_feat == "l2":
+                    seq_feat_ = F.normalize(seq_feat_, p=2, dim=-1)
+                elif norm_feat == "z_score":
                     # Z-score normalization
-                    # features_mean = dino_stats["mean"].mean(dim=-1, keepdim=True)
-                    # features_std = dino_stats["std"].mean(dim=-1, keepdim=True)
-                    # seq_dino_feat_ = (seq_dino_feat_ - features_mean) / (
-                    #     features_std + 1e-6
-                    # )
-                    # sample_mean = seq_dino_feat_.mean(dim=(1, 2))[:, None, None, :]
-                    # sample_std = seq_dino_feat_.std(dim=(1, 2))[:, None, None, :]
-                    # seq_dino_feat_ = (seq_dino_feat_ - sample_mean) / (
-                    #     sample_std + 1e-6
-                    # )
-                    seq_dino_feat_ = (seq_dino_feat_ - dino_stats["mean"]) / (
-                        dino_stats["std"] + 1e-6
+                    seq_feat_ = (seq_feat_ - feat_stats["mean"]) / (
+                        feat_stats["std"] + 1e-6
                     )
-                    # apply tanh to project to [-1, 1]
-                    # seq_dino_feat_ = torch.tanh(seq_dino_feat_/3)
-                elif norm_dino_feat == "min_max":
+                elif norm_feat == "min_max":
                     # MinMax normalization
-                    seq_dino_feat_ = (seq_dino_feat_ - dino_stats["min"]) / (
-                        dino_stats["max"] - dino_stats["min"]
+                    seq_feat_ = (seq_feat_ - feat_stats["min"]) / (
+                        feat_stats["max"] - feat_stats["min"]
                     )
                     # In [-1, 1]
-                    seq_dino_feat_ = seq_dino_feat_ * 2 - 1
+                    seq_feat_ = seq_feat_ * 2 - 1
                 else:
-                    raise ValueError(
-                        f"Normalization method {norm_dino_feat} not supported"
-                    )
+                    raise ValueError(f"Normalization method {norm_feat} not supported")
             else:
                 raise FileNotFoundError("Dino features statistics is None")
-        seq_dino_feat["dino_features"] = seq_dino_feat_
-    return seq_dino_feat
+        seq_feat["features"] = seq_feat_
+    return seq_feat
 
 
 def process_depth(

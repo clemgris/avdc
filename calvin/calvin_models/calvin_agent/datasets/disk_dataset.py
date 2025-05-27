@@ -108,7 +108,7 @@ class DiskDiffusionDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
-    def _get_dino_feat_name(self, file_idx: int) -> Path:
+    def _get_feat_name(self, file_idx: int) -> Path:
         return Path(
             self.abs_datasets_dir
             / f"features_{self.diffuse_on}/features_{file_idx}.npz"
@@ -142,12 +142,12 @@ class DiskDiffusionDataset(BaseDataset):
         if self.with_lang:
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
             episode["task"] = self.lang_task[self.lang_lookup[idx]]
-        if self.with_dino_feat:
-            dino_features = [
-                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+        if self.with_feat:
+            features = [
+                self.load_file(self._get_feat_name(file_idx))["patch_emb"]
                 for file_idx in frames_idx
             ]
-            episode["dino_features"] = dino_features
+            episode["features"] = features
         return episode
 
     def _build_file_indices_lang(
@@ -220,7 +220,7 @@ class DiskDiffusionDataset(BaseDataset):
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
         seq_feat = process_features(
-            episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+            episode, self.with_feat, self.feat_stats, self.norm_feat
         )
         seq_dict = {
             **seq_state_obs,
@@ -361,10 +361,10 @@ class DiskDiffusionDataset(BaseDataset):
         for key in sequence["depth_obs"].keys():
             views.append(sequence["depth_obs"][key])
         images = torch.cat(views, dim=1)
-        dino_features = sequence["dino_features"]
+        features = sequence["features"]
 
-        if self.with_dino_feat:
-            x_cond = dino_features[0][None, ...]
+        if self.with_feat:
+            x_cond = features[0][None, ...]
             x_cond = rearrange(x_cond, "f wh c -> f c wh")
             x_cond = rearrange(
                 x_cond,
@@ -374,7 +374,7 @@ class DiskDiffusionDataset(BaseDataset):
             )
             x_cond = x_cond.squeeze(0)
 
-            x = dino_features[1:].squeeze(1)
+            x = features[1:].squeeze(1)
             x = rearrange(x, "f wh c -> f c wh")
             x = rearrange(
                 x,
@@ -437,7 +437,7 @@ class DiskImageDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
-    def _get_dino_feat_name(self, file_idx: int) -> Path:
+    def _get_feat_name(self, file_idx: int) -> Path:
         return Path(
             self.abs_datasets_dir
             / f"features_{self.diffuse_on}/features_{file_idx}.npz"
@@ -473,21 +473,21 @@ class DiskImageDataset(BaseDataset):
         keys.append("scene_obs")
 
         frame = self.load_file(self._get_episode_name(frame_idx))
-        if self.with_dino_feat:
-            dino_feat = self.load_file(self._get_dino_feat_name(frame_idx))
+        if self.with_feat:
+            features = self.load_file(self._get_feat_name(frame_idx))
 
         sample = {key: frame[key] for key in keys}
-        if self.with_dino_feat:
-            sample["dino_features"] = dino_feat["patch_emb"]
+        if self.with_feat:
+            sample["features"] = features["patch_emb"]
 
         rgb_obs = process_rgb(sample, self.observation_space, self.transforms)
-        dino_feat = process_features(
-            sample, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+        features = process_features(
+            sample, self.with_feat, self.feat_stats, self.norm_feat
         )
-        sample = {**rgb_obs, **dino_feat}
+        sample = {**rgb_obs, **features}
 
         image = sample["rgb_obs"]["rgb_static"].squeeze(0)
-        features = sample["dino_features"].squeeze(0)
+        features = sample["features"].squeeze(0)
         return frame_idx, image, features
 
     def _build_file_indices_lang(
@@ -651,7 +651,7 @@ class DiskActionDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
-    def _get_dino_feat_name(self, file_idx: int) -> Path:
+    def _get_feat_name(self, file_idx: int) -> Path:
         return Path(
             self.abs_datasets_dir
             / f"features_{self.diffuse_on}/features_{file_idx}.npz"
@@ -695,12 +695,12 @@ class DiskActionDataset(BaseDataset):
         ]
 
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
-        if self.with_dino_feat:
-            dino_features = [
-                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+        if self.with_feat:
+            features = [
+                self.load_file(self._get_feat_name(file_idx))["patch_emb"]
                 for file_idx in actions_idx
             ]
-            episode["dino_features"] = dino_features
+            episode["features"] = features
         return episode
 
     def _build_file_indices_lang(
@@ -813,7 +813,7 @@ class DiskActionDataset(BaseDataset):
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
         seq_feat = process_features(
-            episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+            episode, self.with_feat, self.feat_stats, self.norm_feat
         )
         seq_dict = {
             **seq_state_obs,
@@ -839,13 +839,9 @@ class DiskActionDataset(BaseDataset):
         Returns:
             Padded sequence.
         """
-        if self.with_dino_feat:
+        if self.with_feat:
             seq.update(
-                {
-                    "dino_features": self._pad_with_repetition(
-                        seq["dino_features"], pad_size
-                    )
-                }
+                {"features": self._pad_with_repetition(seq["features"], pad_size)}
             )
         seq.update({"robot_obs": self._pad_with_repetition(seq["robot_obs"], pad_size)})
         seq.update(
@@ -958,7 +954,7 @@ class DiskActionDataset(BaseDataset):
             pad_size = self._get_pad_size(sequence)
             sequence = self._pad_sequence(sequence, pad_size)
 
-        if not self.with_dino_feat:
+        if not self.with_feat:
             views_static = []
             views_gripper = []
             for key in sequence["rgb_obs"].keys():
@@ -1026,15 +1022,15 @@ class DiskActionDataset(BaseDataset):
                 else None
             )
 
-        elif self.with_dino_feat:
-            start_image = sequence["dino_features"][0][None]
+        elif self.with_feat:
+            start_image = sequence["features"][0][None]
             start_image = rearrange(
                 start_image,
                 "f (w h) c -> f c w h",
                 w=self.feat_patch_size,
                 h=self.feat_patch_size,
             )
-            end_image = sequence["dino_features"][-1][None]
+            end_image = sequence["features"][-1][None]
             end_image = rearrange(
                 end_image,
                 "f (w h) c -> f c w h",
@@ -1115,7 +1111,7 @@ class DiskEvaluatorDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
-    def _get_dino_feat_name(self, file_idx: int) -> Path:
+    def _get_feat_name(self, file_idx: int) -> Path:
         return Path(
             self.abs_datasets_dir
             / f"features_{self.diffuse_on}/features_{file_idx}.npz"
@@ -1219,12 +1215,12 @@ class DiskEvaluatorDataset(BaseDataset):
             false_ann = self.task2ann[episode["task"]]
             episode["language"] = random.choice(false_ann)
 
-        if self.with_dino_feat:
-            dino_features = [
-                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+        if self.with_feat:
+            features = [
+                self.load_file(self._get_feat_name(file_idx))["patch_emb"]
                 for file_idx in frames_idx
             ]
-            episode["dino_features"] = dino_features
+            episode["features"] = features
         return episode, sucess
 
     def _build_file_indices_lang(
@@ -1297,7 +1293,7 @@ class DiskEvaluatorDataset(BaseDataset):
         seq_acts = process_actions(episode, self.observation_space, self.transforms)
         info = get_state_info_dict(episode)
         seq_feat = process_features(
-            episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+            episode, self.with_feat, self.feat_stats, self.norm_feat
         )
         seq_lang = process_language(episode, self.transforms, self.with_lang)
 
@@ -1335,9 +1331,9 @@ class DiskEvaluatorDataset(BaseDataset):
         for key in sequence["depth_obs"].keys():
             views.append(sequence["depth_obs"][key])
         images = torch.cat(views, dim=0)
-        dino_features = sequence["dino_features"]
-        if self.with_dino_feat:
-            images = dino_features
+        features = sequence["features"]
+        if self.with_feat:
+            images = features
         # task = sequence["lang"]
         task = sequence["task"]
         return images, task, sucess
@@ -1387,7 +1383,7 @@ class DiskDiffusionOracleDataset(BaseDataset):
             f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
         )
 
-    def _get_dino_feat_name(self, file_idx: int) -> Path:
+    def _get_feat_name(self, file_idx: int) -> Path:
         return Path(
             self.abs_datasets_dir
             / f"features_{self.diffuse_on}/features_{file_idx}.npz"
@@ -1422,12 +1418,12 @@ class DiskDiffusionOracleDataset(BaseDataset):
         if self.with_lang:
             episode["task"] = self.lang_task[self.lang_lookup[idx]]
             episode["language"] = self.lang_ann[self.lang_lookup[idx]]
-        if self.with_dino_feat:
-            dino_features = [
-                self.load_file(self._get_dino_feat_name(file_idx))["patch_emb"]
+        if self.with_feat:
+            features = [
+                self.load_file(self._get_feat_name(file_idx))["patch_emb"]
                 for file_idx in episodes_idx
             ]
-            episode["dino_features"] = dino_features
+            episode["features"] = features
         return episode
 
     def _build_file_indices_lang(
@@ -1516,7 +1512,7 @@ class DiskDiffusionOracleDataset(BaseDataset):
         info = get_state_info_dict(episode)
         seq_lang = process_language(episode, self.transforms, self.with_lang)
         seq_feat = process_features(
-            episode, self.with_dino_feat, self.dino_stats, self.norm_dino_feat
+            episode, self.with_feat, self.feat_stats, self.norm_feat
         )
         seq_dict = {
             **seq_state_obs,

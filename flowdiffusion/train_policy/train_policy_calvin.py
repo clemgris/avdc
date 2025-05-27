@@ -50,8 +50,8 @@ def main(args):
         raise ValueError(f"Unknown dataset name {args.train_on}")
     print(f"Training on {dataset_name} dataset")
 
-    if args.diffuse_on == "dino_vit":
-        diffuse_on = f"dino_vit_{args.feat_patch_size}"
+    if args.diffuse_on != "pixel":
+        diffuse_on = f"{args.diffuse_on}_{args.feat_patch_size}"
     else:
         diffuse_on = args.diffuse_on
 
@@ -93,7 +93,7 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": diffuse_on,
-                    "norm_dino_feat": args.norm,
+                    "norm_feat": args.norm,
                     "prob_aug": args.data_aug_prob,
                     "feat_patch_size": args.feat_patch_size,
                 },
@@ -143,7 +143,16 @@ def main(args):
         image_shape = [n_channels, 96, 96]
     elif "dino" in args.diffuse_on:
         n_obs_steps = 2
+        assert args.feat_patch_size % 16 == 0, (
+            f"Feature patch size {args.feat_patch_size} must be a multiple of 16 for DINO features."
+        )
         image_shape = [768, args.feat_patch_size, args.feat_patch_size]
+    elif "r3m" in args.diffuse_on:
+        n_obs_steps = 2
+        assert args.feat_patch_size % 7 == 0, (
+            f"Feature patch size {args.feat_patch_size} must be a multiple of 7 for R3M features."
+        )
+        image_shape = [512, args.feat_patch_size, args.feat_patch_size]
 
     diff_cfg = DictConfig(
         {
@@ -322,7 +331,10 @@ if __name__ == "__main__":
         "--use_gripper", action="store_true"
     )  # set to True to use gripper observations
     parser.add_argument(
-        "--diffuse_on", type=str, default="pixel"
+        "--diffuse_on",
+        type=str,
+        default="pixel",
+        choices=["pixel", "dino_vit", "dino", "r3m"],
     )  # set to diffuse on pixel or dino features
     parser.add_argument(
         "--feat_patch_size", type=int, default=16
