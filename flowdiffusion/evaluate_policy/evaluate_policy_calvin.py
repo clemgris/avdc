@@ -10,6 +10,7 @@ import hydra
 import numpy as np
 import PIL.Image as Image
 import torch
+import torch.nn.functional as F
 from einops import rearrange
 from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning import seed_everything
@@ -31,10 +32,11 @@ sys.path.append(
         "flowdiffusion",
     )
 )
-
+from encoder import R3MEncoder, ViTEncoder  # noqa: E402
 from goal_diffusion import GoalGaussianDiffusion, Trainer
 from unet import UnetMW as Unet
 from utils import save_images
+from vis_features import pca_project_features
 
 sys.path.append(
     os.path.join(
@@ -222,6 +224,54 @@ class CustomModel(CalvinBaseModel):
 
             self.high_level = trainer
 
+        # Encoder
+        self.use_feat = self.cfg.policy.datamodule.lang_dataset.diffuse_on != "pixel"
+        if self.use_feat:
+            if "dino_vit" in self.cfg.policy.datamodule.lang_dataset.diffuse_on:
+                self.vision_encoder = ViTEncoder()
+            elif "r3m" in self.cfg.policy.datamodule.lang_dataset.diffuse_on:
+                self.vision_encoder = R3MEncoder("resnet18")
+
+        # Normlisation
+        self.norm_feat = self.cfg.policy.datamodule.lang_dataset.norm_feat
+        self.feat_stats_path = (
+            Path(self.cfg.policy.root)
+            / f"{self.cfg.policy.datamodule.lang_dataset.diffuse_on}_stats.pt"
+        )
+        if os.path.exists(self.feat_stats_path):
+            self.feat_stats = torch.load(self.feat_stats_path)["dino_features"]
+        else:
+            self.feat_stats = None
+
+    def norm_fonct(self, x):
+        if self.use_feat:
+            if self.norm_feat is not None:
+                if self.feat_stats is not None:
+                    if self.norm_feat == "l2":
+                        return F.normalize(x, p=2, dim=-1)
+                    elif self.norm_feat == "z_score":
+                        # Z-score normalization
+                        return (x - self.feat_stats["mean"]) / (
+                            self.feat_stats["std"] + 1e-6
+                        )
+                    elif self.norm_feat == "min_max":
+                        # MinMax normalization
+                        return (x - self.feat_stats["min"]) / (
+                            self.feat_stats["max"] - self.feat_stats["min"]
+                        ) * 2 - 1
+                    else:
+                        raise ValueError(
+                            f"Normalization method {self.norm_feat} not supported"
+                        )
+                else:
+                    raise FileNotFoundError("Features statistics is None")
+            else:
+                return x
+        else:
+            raise ValueError(
+                "Normalization is only supported for features, not for pixel data"
+            )
+
     def reset(self):
         """
         This is called
@@ -230,7 +280,12 @@ class CustomModel(CalvinBaseModel):
 
     def save_image(self, image, name):
         saving_path = Path(self.debug_path) / name
-        save_images((image + 1) / 2, saving_path, nrow=image.shape[0])
+        if image.shape[1] > 8:
+            image = rearrange(image, "f c h w -> f (h w) c")
+            image = pca_project_features(image.to(self.device).detach())
+        else:
+            image = (image + 1) / 2
+        save_images(image, saving_path, nrow=image.shape[0])
 
     def step(self, obs, text_goal, oracle_subgoals=None):
         """
@@ -240,37 +295,91 @@ class CustomModel(CalvinBaseModel):
         Returns:
             action: predicted action
         """
-        # Normalise obs
-        obs_image = obs["rgb_obs"]["rgb_static"]
-        if "depth_static" in obs["depth_obs"].keys():
-            obs_image = torch.cat(
-                [
-                    obs_image,
-                    obs["depth_obs"]["depth_static"],
-                ],
-                dim=-3,
+        if not self.use_feat:
+            views_static = []
+            views_gripper = []
+            for key in obs["rgb_obs"].keys():
+                if key == "rgb_static":
+                    views_static.append(obs["rgb_obs"][key][0])
+                elif key == "rgb_gripper":
+                    views_gripper.append(obs["rgb_obs"][key][0])
+            for key in obs["depth_obs"].keys():
+                if key == "depth_static":
+                    views_static.append(obs["depth_obs"][key][0])
+                elif key == "depth_gripper":
+                    views_gripper.append(obs["depth_obs"][key][0])
+        else:
+            _, init = self.vision_encoder(obs["rgb_obs"]["rgb_static"][0])
+            init = self.norm_fonct(init)
+            init = rearrange(
+                init,
+                "f (w h) c -> f c w h",
+                w=self.cfg.policy.datamodule.lang_dataset.feat_patch_size,
+                h=self.cfg.policy.datamodule.lang_dataset.feat_patch_size,
             )
-        # Save image
-        if self.debug:
-            self.save_image(
-                obs_image[0],
-                f"obs_{self.steps}.png",
+
+            # Normalise the init image
+            views_static = [init]
+            views_gripper = []
+
+        assert len(views_static) > 0 or len(views_gripper) > 0
+
+        start_image_static = (
+            torch.cat(views_static, dim=1) if len(views_static) > 0 else None
+        )
+        start_image_gripper = (
+            torch.cat(views_gripper, dim=1) if len(views_gripper) > 0 else None
+        )
+
+        init = (
+            torch.cat(
+                [start_image_static[:, None], start_image_gripper[:, None]],
+                dim=-4,
             )
+            if len(views_gripper) > 0
+            else start_image_static[:, None]
+        ).to(self.device)
 
         # Orcale subgoals
         if self.use_oracle_subgoals:
-            subgoals_views_static = []
-            subgoals_views_gripper = []
-            for key in oracle_subgoals["rgb_obs"].keys():
-                if key == "rgb_static":
-                    subgoals_views_static.append(oracle_subgoals["rgb_obs"][key][1:])
-                elif key == "rgb_gripper":
-                    subgoals_views_gripper.append(oracle_subgoals["rgb_obs"][key][1:])
-            for key in oracle_subgoals["depth_obs"].keys():
-                if key == "depth_static":
-                    subgoals_views_static.append(oracle_subgoals["depth_obs"][key][1:])
-                elif key == "depth_gripper":
-                    subgoals_views_gripper.append(oracle_subgoals["depth_obs"][key][1:])
+            if not self.use_feat:
+                subgoals_views_static = []
+                subgoals_views_gripper = []
+                for key in oracle_subgoals["rgb_obs"].keys():
+                    if key == "rgb_static":
+                        subgoals_views_static.append(
+                            oracle_subgoals["rgb_obs"][key][1:]
+                        )
+                    elif key == "rgb_gripper":
+                        subgoals_views_gripper.append(
+                            oracle_subgoals["rgb_obs"][key][1:]
+                        )
+                for key in oracle_subgoals["depth_obs"].keys():
+                    if key == "depth_static":
+                        subgoals_views_static.append(
+                            oracle_subgoals["depth_obs"][key][1:]
+                        )
+                    elif key == "depth_gripper":
+                        subgoals_views_gripper.append(
+                            oracle_subgoals["depth_obs"][key][1:]
+                        )
+            else:
+                _, subgoals = self.vision_encoder(
+                    oracle_subgoals["rgb_obs"]["rgb_static"][1:].to(self.device)
+                )
+
+                # Normalise subgoals
+                subgoals = self.norm_fonct(subgoals)
+
+                subgoals = rearrange(
+                    subgoals,
+                    "f (w h) c -> f c w h",
+                    w=self.cfg.policy.datamodule.lang_dataset.feat_patch_size,
+                    h=self.cfg.policy.datamodule.lang_dataset.feat_patch_size,
+                )
+
+                subgoals_views_static = [subgoals]
+                subgoals_views_gripper = []
 
             assert len(subgoals_views_static) > 0 or len(subgoals_views_gripper) > 0
 
@@ -296,17 +405,7 @@ class CustomModel(CalvinBaseModel):
                 if len(subgoals_views_gripper) > 0
                 else subgoals_image_static[:, None]
             )[None].to(self.device)
-            if self.debug:
-                # Save subgoals
-                self.save_image(
-                    self.sub_goals[0],
-                    f"oracle_subgoals_{text_goal}.png",
-                )
-                # Save initial frame
-                self.save_image(
-                    oracle_subgoals["rgb_obs"]["rgb_static"][0],
-                    f"oracle_init_{text_goal}.png",
-                )
+
         else:
             # Generate sequence of subgoals
             sample_subgoals = (
@@ -321,7 +420,7 @@ class CustomModel(CalvinBaseModel):
                 )
                 self.sub_goals = (
                     self.high_level.sample(
-                        obs_image[0], [text_goal], 1, self.guidance_weight
+                        init[0], [text_goal], 1, self.guidance_weight
                     )
                     .cpu()
                     .detach()
@@ -350,36 +449,6 @@ class CustomModel(CalvinBaseModel):
                 )
 
             target = self.sub_goals[:, sub_goal_idx].to(self.device)
-            views_static = []
-            views_gripper = []
-            for key in obs["rgb_obs"].keys():
-                if key == "rgb_static":
-                    views_static.append(obs["rgb_obs"][key][0])
-                elif key == "rgb_gripper":
-                    views_gripper.append(obs["rgb_obs"][key][0])
-            for key in obs["depth_obs"].keys():
-                if key == "depth_static":
-                    views_static.append(obs["depth_obs"][key][0])
-                elif key == "depth_gripper":
-                    views_gripper.append(obs["depth_obs"][key][0])
-
-            assert len(views_static) > 0 or len(views_gripper) > 0
-
-            start_image_static = (
-                torch.cat(views_static, dim=1) if len(views_static) > 0 else None
-            )
-            start_image_gripper = (
-                torch.cat(views_gripper, dim=1) if len(views_gripper) > 0 else None
-            )
-
-            init = (
-                torch.cat(
-                    [start_image_static[:, None], start_image_gripper[:, None]],
-                    dim=-4,
-                )
-                if len(views_gripper) > 0
-                else start_image_static[:, None]
-            ).to(self.device)
             obs_goal_images = torch.cat([init, target], dim=0)
 
             # Save initial and target frames
@@ -672,6 +741,26 @@ if __name__ == "__main__":
         )
     else:
         high_level_data_config = {}
+
+    # Do not change
+    args.ep_len = 240
+
+    if args.server == "jz":
+        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D_jz"
+        rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
+    elif args.server == "hacienda":
+        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+        rollout_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
+    else:
+        raise ValueError("Invalid server argument")
+
+    # load low level config
+    policy_data_config.datamodule.lang_dataset._target_ = (
+        "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset"
+    )
+    del policy_data_config.datamodule.lang_dataset.prob_aug
+    policy_data_config.root = data_path
+
     config = DictConfig(
         {
             "policy": {
@@ -708,31 +797,86 @@ if __name__ == "__main__":
     else:
         print("Using generated subgoals")
 
-    # Do not change
-    args.ep_len = 240
-
-    if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D_jz"
-        rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
-    elif args.server == "hacienda":
-        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
-        rollout_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
-    else:
-        raise ValueError("Invalid server argument")
-
-    # load low level config
-    policy_data_config.datamodule.lang_dataset._target_ = (
-        "calvin_agent.datasets.disk_dataset.DiskDiffusionOracleDataset"
-    )
-    del policy_data_config.datamodule.lang_dataset.prob_aug
-    policy_data_config.root = data_path
-
-    transforms_dict = OmegaConf.load(
-        os.path.join(
-            root_path,
-            "calvin/calvin_models/conf/datamodule/transforms/play_basic.yaml",
+    if policy_data_config.datamodule.lang_dataset.diffuse_on == "pixel":
+        transforms_dict = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/datamodule/transforms/play_basic.yaml",
+            )
         )
-    )
+    else:
+        transforms_dict = OmegaConf.load(
+            os.path.join(
+                root_path,
+                "calvin/calvin_models/conf/datamodule/transforms/play_features_imagenet.yaml",
+            )
+        )
+        if "dino" in policy_data_config.datamodule.lang_dataset.diffuse_on:
+            for section in ["train", "val"]:
+                if hasattr(transforms_dict, section) and hasattr(
+                    transforms_dict[section], "rgb_static"
+                ):
+                    for transform in transforms_dict[section].rgb_static:
+                        if (
+                            "_target_" in transform
+                            and transform["_target_"] == "torchvision.transforms.Resize"
+                        ):
+                            print(
+                                f"Resize {section} to",
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 14,
+                            )
+                            transform["size"] = (
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 14
+                            )
+                        elif (
+                            "_target_" in transform
+                            and transform["_target_"]
+                            == "torchvision.transforms.CenterCrop"
+                        ):
+                            print(
+                                f"CenterCrop {section} to",
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 14,
+                            )
+                            transform["size"] = (
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 14
+                            )
+        elif "r3m" in policy_data_config.datamodule.lang_dataset.diffuse_on:
+            for section in ["train", "val"]:
+                if hasattr(transforms_dict, section) and hasattr(
+                    transforms_dict[section], "rgb_static"
+                ):
+                    for transform in transforms_dict[section].rgb_static:
+                        if (
+                            "_target_" in transform
+                            and transform["_target_"] == "torchvision.transforms.Resize"
+                        ):
+                            print(
+                                f"Resize {section} to",
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 32,
+                            )
+                            transform["size"] = (
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 32
+                            )
+                        elif (
+                            "_target_" in transform
+                            and transform["_target_"]
+                            == "torchvision.transforms.CenterCrop"
+                        ):
+                            print(
+                                f"CenterCrop {section} to",
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 32,
+                            )
+                            transform["size"] = (
+                                policy_data_config.datamodule.lang_dataset.feat_patch_size
+                                * 32
+                            )
 
     data_module = CalvinDataModule(
         policy_data_config.datamodule,
