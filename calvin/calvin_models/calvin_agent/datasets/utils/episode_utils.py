@@ -126,7 +126,7 @@ def process_features(
                 else:
                     raise ValueError(f"Normalization method {norm_feat} not supported")
             else:
-                raise FileNotFoundError("Dino features statistics is None")
+                raise FileNotFoundError("Features statistics is None")
         seq_feat["features"] = seq_feat_
     return seq_feat
 
