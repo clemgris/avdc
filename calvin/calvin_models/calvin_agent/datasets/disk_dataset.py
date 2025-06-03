@@ -644,7 +644,6 @@ class DiskActionDataset(BaseDataset):
         )
 
         self.prob_data_aug = prob_aug
-        self.with_lang = False
 
     def _get_episode_name(self, file_idx: int) -> Path:
         return Path(
@@ -701,6 +700,9 @@ class DiskActionDataset(BaseDataset):
                 for file_idx in actions_idx
             ]
             episode["features"] = features
+        if self.with_lang:
+            episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
         return episode
 
     def _build_file_indices_lang(
@@ -746,11 +748,11 @@ class DiskActionDataset(BaseDataset):
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
             assert end_idx >= self.max_window_size
-            lang_lookup.append(i)
             num_frames = end_idx - start_idx + 1
             chunk_size = int(np.ceil(num_frames / self.num_subgoals))
             for j in range(0, max(1, num_frames - chunk_size)):
                 episode_lookup.append((start_idx, end_idx, j))
+                lang_lookup.append(i)
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
 
     def _build_file_indices(self, abs_datasets_dir: Path) -> np.ndarray:
@@ -1057,6 +1059,7 @@ class DiskActionDataset(BaseDataset):
             "observation.state": state,
             "action": actions,
             "action_is_pad": action_is_pad,
+            "text": sequence["lang"],
         }
         if len(views_static) > 0:
             res["observation.image_static"] = start_end_images_static

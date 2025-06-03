@@ -17,6 +17,14 @@ sys.path.append(
 
 import torch
 from omegaconf import DictConfig, OmegaConf
+from transformers import (
+    AutoTokenizer,
+    CLIPTextModel,
+    CLIPTokenizer,
+    SiglipTextModel,
+    SiglipTokenizer,
+    T5EncoderModel,
+)
 
 from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
 from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
@@ -100,6 +108,7 @@ def main(args):
             },
             "training_steps": args.training_steps,  # In gradient steps
             "save_every": 100,  # In gradient steps
+            "use_text": args.use_text,
         }
     )
 
@@ -154,6 +163,49 @@ def main(args):
         )
         image_shape = [512, args.feat_patch_size, args.feat_patch_size]
 
+    # Text encoder
+    if args.text_encoder == "CLIP":
+        if args.server == "jz":
+            text_pretrained_model = (
+                "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+            )
+        else:
+            text_pretrained_model = "openai/clip-vit-base-patch32"
+
+        tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
+        text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
+        text_embed_dim = 512
+
+    elif args.text_encoder == "Flan-t5":
+        if args.server == "jz":
+            text_pretrained_model = (
+                "/lustre/fsmisc/dataset/HuggingFace_Models/google/flan-t5-base"
+            )
+        else:
+            text_pretrained_model = "google/flan-t5-base"
+        text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
+        tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
+        text_embed_dim = 768
+
+    elif args.text_encoder == "Siglip":
+        if args.server == "jz":
+            text_pretrained_model = "/lustre/fsn1/projects/rech/fch/uxv44vw/models/google/siglip-base-patch16-224"
+        else:
+            text_pretrained_model = "google/siglip-base-patch16-224"
+        tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
+        text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
+        text_embed_dim = 768
+
+    text_encoder = text_encoder.to(device)
+    text_encoder.requires_grad_(False)
+    text_encoder.eval()
+
+    text_encoder_num_params = sum(p.numel() for p in text_encoder.parameters())
+    print(
+        f"Number of parameters in text encoder {text_pretrained_model}: {text_encoder_num_params / 1e6:.2f}M"
+    )
+
+    # Diffusion Policy
     diff_cfg = DictConfig(
         {
             "n_obs_steps": n_obs_steps,
@@ -175,6 +227,9 @@ def main(args):
             "output_normalization_modes": {"action": "min_max"},
             "crop_shape": None,
             "vision_backbone": "resnet18" if args.diffuse_on == "pixel" else "identity",
+            "use_text": args.use_text,
+            "text_embed_dim": text_embed_dim,
+            "final_text_embed_dim": 64,
         }
     )
 
@@ -261,6 +316,18 @@ def main(args):
 
     while not done:
         for batch in dataloader:
+            batch_text = batch.get("text", None)
+            if args.use_text:
+                batch_text_ids = tokenizer(
+                    batch_text,
+                    return_tensors="pt",
+                    padding=True,
+                    truncation=True,
+                    max_length=128,
+                ).to(device)
+                batch["text"] = text_encoder(**batch_text_ids).last_hidden_state
+            else:
+                batch["text"] = None
             batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
             output_dict = policy.forward(batch)
             loss = output_dict["loss"]
@@ -345,5 +412,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch_size", type=int, default=32
     )  # set to batch size for training
+    parser.add_argument(
+        "--use_text", action="store_true"
+    )  # set to True to use text observations (language annotations)
+    parser.add_argument(
+        "--text_encoder",
+        type=str,
+        default="CLIP",
+        choices=["CLIP", "Flan-t5", "Siglip"],
+    )  # set to text encoder to use
     args = parser.parse_args()
     main(args)
