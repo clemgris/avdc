@@ -104,6 +104,7 @@ def main(args):
                     "norm_feat": args.norm,
                     "prob_aug": args.data_aug_prob,
                     "feat_patch_size": args.feat_patch_size,
+                    "without_guidance": args.without_guidance,
                 },
             },
             "training_steps": args.training_steps,  # In gradient steps
@@ -147,21 +148,25 @@ def main(args):
     device = torch.device("cuda")
     log_freq = 10
 
+    # Observation representation shape
     if args.diffuse_on == "pixel":
-        n_obs_steps = 2
         image_shape = [n_channels, 96, 96]
     elif "dino" in args.diffuse_on:
-        n_obs_steps = 2
         assert args.feat_patch_size % 16 == 0, (
             f"Feature patch size {args.feat_patch_size} must be a multiple of 16 for DINO features."
         )
         image_shape = [768, args.feat_patch_size, args.feat_patch_size]
     elif "r3m" in args.diffuse_on:
-        n_obs_steps = 2
         assert args.feat_patch_size % 7 == 0, (
             f"Feature patch size {args.feat_patch_size} must be a multiple of 7 for R3M features."
         )
         image_shape = [512, args.feat_patch_size, args.feat_patch_size]
+
+    # Num observation
+    if args.without_guidance:
+        n_obs_steps = 1
+    else:
+        n_obs_steps = 2  # (observation + target)
 
     # Text encoder
     if args.text_encoder == "CLIP":
@@ -421,5 +426,7 @@ if __name__ == "__main__":
         default="CLIP",
         choices=["CLIP", "Flan-t5", "Siglip"],
     )  # set to text encoder to use
+    parser.add_argument("--without_guidance", action="store_true")
+    # set to True to train without guidance (i.e. no target conditioning)
     args = parser.parse_args()
     main(args)

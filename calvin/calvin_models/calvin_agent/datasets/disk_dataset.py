@@ -618,11 +618,13 @@ class DiskActionDataset(BaseDataset):
         *args: Any,
         num_subgoals: int = 1,
         prob_aug: float = 0.5,
+        without_guidance: bool = False,
         save_format: str = "npz",
         pretrain: bool = False,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
+        self.without_guidance = without_guidance
         self.save_format = save_format
         if self.save_format == "pkl":
             self.load_file = load_pkl
@@ -1013,16 +1015,24 @@ class DiskActionDataset(BaseDataset):
                 if len(target_views_gripper) > 0
                 else None
             )
-            start_end_images_static = (
-                torch.cat([start_image_static, end_image_static], dim=0)
-                if len(target_views_static) > 0
-                else None
-            )
-            start_end_images_gripper = (
-                torch.cat([start_image_gripper, end_image_gripper], dim=0)
-                if len(target_views_gripper) > 0
-                else None
-            )
+            if self.without_guidance:
+                start_end_images_static = (
+                    start_image_static if len(target_views_static) > 0 else None
+                )
+                start_end_images_gripper = (
+                    start_image_gripper if len(target_views_gripper) > 0 else None
+                )
+            else:
+                start_end_images_static = (
+                    torch.cat([start_image_static, end_image_static], dim=0)
+                    if len(target_views_static) > 0
+                    else None
+                )
+                start_end_images_gripper = (
+                    torch.cat([start_image_gripper, end_image_gripper], dim=0)
+                    if len(target_views_gripper) > 0
+                    else None
+                )
 
         elif self.with_feat:
             start_image = sequence["features"][0][None]
@@ -1040,7 +1050,10 @@ class DiskActionDataset(BaseDataset):
                 h=self.feat_patch_size,
             )
 
-            start_end_images_static = torch.cat([start_image, end_image], dim=0)
+            if self.without_guidance:
+                start_end_images_static = start_image
+            else:
+                start_end_images_static = torch.cat([start_image, end_image], dim=0)
             state = torch.zeros((start_end_images_static.shape[0], 0))
 
             views_static = [start_image]
