@@ -110,6 +110,7 @@ def main(args):
             "training_steps": args.training_steps,  # In gradient steps
             "save_every": 100,  # In gradient steps
             "use_text": args.use_text,
+            "text_encoder": args.text_encoder,
         }
     )
 
@@ -332,7 +333,7 @@ def main(args):
                 ).to(device)
                 batch["text"] = text_encoder(**batch_text_ids).last_hidden_state
             else:
-                batch["text"] = None
+                del batch["text"]
             batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
             output_dict = policy.forward(batch)
             loss = output_dict["loss"]
