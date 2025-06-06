@@ -670,7 +670,8 @@ class UNetModel(nn.Module):
             hs.append(h)
         h = self.middle_block(h, emb)
         for module in self.output_blocks:
-            h = th.cat([h, hs.pop()], dim=1)
+            resco = hs.pop()
+            h = th.cat([h, resco], dim=1)
             h = module(h, emb)
         h = h.type(x.dtype)
         return self.out(h)

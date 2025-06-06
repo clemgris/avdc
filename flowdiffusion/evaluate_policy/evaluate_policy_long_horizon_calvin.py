@@ -790,6 +790,8 @@ def main():
     parser.add_argument("--device", default=0, type=int, help="CUDA device")
     args = parser.parse_args()
 
+    assert not args.use_oracle_subgoals
+
     if args.debug_path:
         # Create debug folder
         debug_path = Path(args.debug_path)

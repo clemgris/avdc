@@ -865,7 +865,7 @@ class Trainer(object):
         calculate_fid=True,
         inception_block_idx=2048,
         cond_drop_chance=0.1,
-        dino_stats=None,
+        feat_stats=None,
         norm_feat=None,
     ):
         super().__init__()
@@ -902,7 +902,7 @@ class Trainer(object):
 
         if self.in_channels > 10:
             self.feature_decoder = feature_decoder
-            self.features_stats = dino_stats
+            self.features_stats = feat_stats
             self.norm_feat = norm_feat
         else:
             self.feature_decoder = None
