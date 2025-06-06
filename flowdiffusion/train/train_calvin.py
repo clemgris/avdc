@@ -53,8 +53,8 @@ def main(args):
     results_folder = args.results_folder
     data_path = args.data_path
 
-    if args.diffuse_on == "dino_vit":
-        diffuse_on = f"dino_vit_{args.feat_patch_size}"
+    if args.diffuse_on != "pixel":
+        diffuse_on = f"{args.diffuse_on}_{args.feat_patch_size}"
     else:
         diffuse_on = args.diffuse_on
 
@@ -96,7 +96,7 @@ def main(args):
                     "lang_folder": "lang_annotations",
                     "num_workers": 2,
                     "diffuse_on": diffuse_on,
-                    "norm_dino_feat": args.norm,
+                    "norm_feat": args.norm,
                     "feat_patch_size": args.feat_patch_size,
                 },
             },
@@ -114,8 +114,13 @@ def main(args):
     sample_per_seq = cfg.datamodule.lang_dataset.num_subgoals + 1
 
     if "dino" in cfg.datamodule.lang_dataset.diffuse_on:
+        assert args.feat_patch_size % 16 == 0, "Dino patch size must be multiple of 16"
         target_size = (args.feat_patch_size, args.feat_patch_size)
         channel = 768
+    elif "r3m" in cfg.datamodule.lang_dataset.diffuse_on:
+        assert args.feat_patch_size % 7 == 0, "R3M patch size must be multiple of 7"
+        target_size = (args.feat_patch_size, args.feat_patch_size)
+        channel = 512
     elif cfg.datamodule.lang_dataset.diffuse_on == "pixel":
         target_size = (96, 96)
         if cfg.datamodule.lang_dataset.obs_space.depth_obs != []:
@@ -257,6 +262,13 @@ def main(args):
             channel_mult = (1, 2, 3, 4)
         elif args.feat_patch_size == 64:
             channel_mult = (1, 2, 3, 4, 5)
+    elif args.diffuse_on == "r3m":
+        if args.feat_patch_size == 7:
+            channel_mult = (1, 2)
+        if args.feat_patch_size == 14:
+            channel_mult = (1, 2, 3)
+        if args.feat_patch_size == 21:
+            channel_mult = (1, 2, 3, 4)
 
     unet = Unet(channel, channel_mult=channel_mult, text_embed_dim=text_embed_dim)
 
@@ -282,6 +294,7 @@ def main(args):
 
     diffusion = GoalGaussianDiffusion(
         channels=channel * (sample_per_seq - 1),
+        num_subgoals=(sample_per_seq - 1),
         model=unet,
         image_size=target_size,
         timesteps=100,
@@ -291,6 +304,7 @@ def main(args):
         beta_schedule="cosine",
         min_snr_loss_weight=True,
         auto_normalize=False,
+        temporal_loss_weight=args.temporal_loss_weight,
     )
 
     trainer = Trainer(
@@ -316,8 +330,8 @@ def main(args):
         precision=precision,
         amp=amp,
         calculate_fid=False,
-        dino_stats=train_set.dino_stats,
-        norm_feat=cfg.datamodule.lang_dataset.norm_dino_feat,
+        feat_stats=train_set.feat_stats,
+        norm_feat=cfg.datamodule.lang_dataset.norm_feat,
     )
 
     if args.checkpoint_num is not None:
@@ -435,16 +449,16 @@ def main(args):
             # Generate samples
             _, init_feat = encoder_model(image[None, ...].to(device))
 
-            if cfg.datamodule.lang_dataset.norm_dino_feat:
+            if cfg.datamodule.lang_dataset.norm_feat:
                 # Normalise init_feat
-                if cfg.datamodule.lang_dataset.norm_dino_feat == "l2":
+                if cfg.datamodule.lang_dataset.norm_feat == "l2":
                     init_feat = F.normalize(init_feat, dim=-1)
-                elif cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                elif cfg.datamodule.lang_dataset.norm_feat == "z_score":
                     init_feat = (init_feat - dino_stats["mean"]) / (
                         dino_stats["std"] + 1e-6
                     )
                     # init_feat = torch.tanh(init_feat)
-                elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
+                elif cfg.datamodule.lang_dataset.norm_feat == "min_max":
                     init_feat = (init_feat - dino_stats["min"]) / (
                         dino_stats["max"] - dino_stats["min"]
                     )
@@ -467,14 +481,14 @@ def main(args):
                     n=(sample_per_seq - 1),
                 )
                 # Unnormalize
-                if cfg.datamodule.lang_dataset.norm_dino_feat:
-                    if cfg.datamodule.lang_dataset.norm_dino_feat == "l2":
+                if cfg.datamodule.lang_dataset.norm_feat:
+                    if cfg.datamodule.lang_dataset.norm_feat == "l2":
                         output = F.normalize(output, dim=-1)
-                    elif cfg.datamodule.lang_dataset.norm_dino_feat == "z_score":
+                    elif cfg.datamodule.lang_dataset.norm_feat == "z_score":
                         # output = output.clip(-0.999, 0.999)
                         # output = torch.arctanh(output)
                         output = output * dino_stats["std"] + dino_stats["mean"]
-                    elif cfg.datamodule.lang_dataset.norm_dino_feat == "min_max":
+                    elif cfg.datamodule.lang_dataset.norm_feat == "min_max":
                         output = (output + 1) / 2
                         output = (
                             output * (dino_stats["max"] - dino_stats["min"])
@@ -546,7 +560,10 @@ if __name__ == "__main__":
         "-g", "--guidance_weight", type=int, default=0
     )  # set to positive to use guidance
     parser.add_argument(
-        "--diffuse_on", type=str, default="pixel", choices=["pixel", "dino", "dino_vit"]
+        "--diffuse_on",
+        type=str,
+        default="pixel",
+        choices=["pixel", "dino", "dino_vit", "r3m"],
     )  # set to 'pixel' or 'dino_feat' to diffuse on pixel or dino features
     parser.add_argument(
         "--feat_patch_size", type=int, default=16
@@ -599,6 +616,11 @@ if __name__ == "__main__":
         "--use_gripper", action="store_true"
     )  # set to use gripper images
     args = parser.parse_args()
+    parser.add_argument(
+        "--temporal_loss_weight",
+        type=float,
+        default=0.0,
+    )  # set to temporal loss weight
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None

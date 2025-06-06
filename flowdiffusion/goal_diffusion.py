@@ -390,6 +390,8 @@ class GoalGaussianDiffusion(nn.Module):
         auto_normalize=True,
         min_snr_loss_weight=False,  # https://arxiv.org/abs/2303.09556
         min_snr_gamma=5,
+        num_subgoals=8,
+        temporal_loss_weight=0.1,
     ):
         super().__init__()
         # assert not (type(self) == GoalGaussianDiffusion and model.channels != model.out_dim)
@@ -398,6 +400,8 @@ class GoalGaussianDiffusion(nn.Module):
         self.model = model
 
         self.channels = channels
+
+        self.num_subgoals = num_subgoals
 
         self.image_size = image_size
 
@@ -425,6 +429,8 @@ class GoalGaussianDiffusion(nn.Module):
         (timesteps,) = betas.shape
         self.num_timesteps = int(timesteps)
         self.loss_type = loss_type
+
+        self.temporal_loss_weight = temporal_loss_weight
 
         # sampling related parameters
 
@@ -537,6 +543,12 @@ class GoalGaussianDiffusion(nn.Module):
             self.posterior_log_variance_clipped, t, x_t.shape
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
+
+    def temporal_loss(self, x_0):
+        x_0 = rearrange(x_0, "b (t c) h w -> b t (c h w)", t=self.num_subgoals)
+        diff = x_0[:, 1:, :] - x_0[:, :-1, :]
+        loss = torch.mean(diff**2, dim=(1, 2))
+        return loss
 
     def model_predictions(
         self,
@@ -802,18 +814,21 @@ class GoalGaussianDiffusion(nn.Module):
         model_out = self.model(torch.cat([x, x_cond], dim=1), t, task_embed)
         if self.objective == "pred_noise":
             target = noise
+            pred_x0 = self.predict_start_from_noise(x, t, model_out)
         elif self.objective == "pred_x0":
             target = x_start
+            pred_x0 = model_out
         elif self.objective == "pred_v":
             v = self.predict_v(x_start, t, noise)
             target = v
+            pred_x0 = self.predict_start_from_v(x, t, model_out)
         else:
             raise ValueError(f"unknown objective {self.objective}")
         loss = self.loss_fn(model_out, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
-
         loss = loss * extract(self.loss_weight, t, loss.shape)
-        return loss.mean()
+        loss_reg = self.temporal_loss_weight * self.temporal_loss(pred_x0)
+        return loss.mean() + loss_reg.mean()
 
     def forward(self, img, img_cond, task_embed):
         (
