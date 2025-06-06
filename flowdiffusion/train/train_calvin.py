@@ -615,12 +615,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use_gripper", action="store_true"
     )  # set to use gripper images
-    args = parser.parse_args()
     parser.add_argument(
         "--temporal_loss_weight",
         type=float,
         default=0.0,
     )  # set to temporal loss weight
+    args = parser.parse_args()
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None

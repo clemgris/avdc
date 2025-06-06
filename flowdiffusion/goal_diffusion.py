@@ -544,10 +544,12 @@ class GoalGaussianDiffusion(nn.Module):
         )
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
-    def temporal_loss(self, x_0):
+    def temporal_loss(self, x_0, x_start):
         x_0 = rearrange(x_0, "b (t c) h w -> b t (c h w)", t=self.num_subgoals)
-        diff = x_0[:, 1:, :] - x_0[:, :-1, :]
-        loss = torch.mean(diff**2, dim=(1, 2))
+        x_start = rearrange(x_start, "b (t c) h w -> b t (c h w)", t=self.num_subgoals)
+        pred_diff = x_0[:, 1:, :] - x_0[:, :-1, :]
+        true_diff = x_start[:, 1:, :] - x_start[:, :-1, :]
+        loss = F.mse_loss(pred_diff, true_diff, reduction="none")
         return loss
 
     def model_predictions(
@@ -827,7 +829,7 @@ class GoalGaussianDiffusion(nn.Module):
         loss = self.loss_fn(model_out, target, reduction="none")
         loss = reduce(loss, "b ... -> b (...)", "mean")
         loss = loss * extract(self.loss_weight, t, loss.shape)
-        loss_reg = self.temporal_loss_weight * self.temporal_loss(pred_x0)
+        loss_reg = self.temporal_loss_weight * self.temporal_loss(pred_x0, x_start)
         return loss.mean() + loss_reg.mean()
 
     def forward(self, img, img_cond, task_embed):
