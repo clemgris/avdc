@@ -232,6 +232,42 @@ class CustomModel(CalvinBaseModel):
             elif "r3m" in self.cfg.policy.datamodule.lang_dataset.diffuse_on:
                 self.vision_encoder = R3MEncoder("resnet18")
 
+        # Text encoder
+        self.use_text = self.cfg.policy.diff_cfg.get("use_text", False)
+        if cfg.policy.text_encoder == "CLIP":
+            if cfg.server == "jz":
+                text_pretrained_model = "/lustre/fsmisc/dataset/HuggingFace_Models/openai/clip-vit-base-patch32"
+            else:
+                text_pretrained_model = "openai/clip-vit-base-patch32"
+
+            self.tokenizer = CLIPTokenizer.from_pretrained(text_pretrained_model)
+            self.text_encoder = CLIPTextModel.from_pretrained(text_pretrained_model)
+            text_embed_dim = 512
+
+        elif cfg.policy.text_encoder == "Flan-t5":
+            if cfg.server == "jz":
+                text_pretrained_model = (
+                    "/lustre/fsmisc/dataset/HuggingFace_Models/google/flan-t5-base"
+                )
+            else:
+                text_pretrained_model = "google/flan-t5-base"
+            self.text_encoder = T5EncoderModel.from_pretrained(text_pretrained_model)
+            self.tokenizer = AutoTokenizer.from_pretrained(text_pretrained_model)
+            text_embed_dim = 768
+
+        elif cfg.policy.text_encoder == "Siglip":
+            if cfg.server == "jz":
+                text_pretrained_model = "/lustre/fsn1/projects/rech/fch/uxv44vw/models/google/siglip-base-patch16-224"
+            else:
+                text_pretrained_model = "google/siglip-base-patch16-224"
+            self.tokenizer = SiglipTokenizer.from_pretrained(text_pretrained_model)
+            self.text_encoder = SiglipTextModel.from_pretrained(text_pretrained_model)
+            text_embed_dim = 768
+
+        self.text_encoder = self.text_encoder.to(device)
+        self.text_encoder.requires_grad_(False)
+        self.text_encoder.eval()
+
         # Normlisation
         self.norm_feat = self.cfg.policy.datamodule.lang_dataset.norm_feat
         self.feat_stats_path = (
@@ -295,6 +331,16 @@ class CustomModel(CalvinBaseModel):
         Returns:
             action: predicted action
         """
+        if self.use_text:
+            text_ids = self.tokenizer(
+                text_goal,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=128,
+            ).to(device)
+            encoded_text = self.text_encoder(**text_ids).last_hidden_state
+
         if not self.use_feat:
             views_static = []
             views_gripper = []
@@ -449,7 +495,10 @@ class CustomModel(CalvinBaseModel):
                 )
 
             target = self.sub_goals[:, sub_goal_idx].to(self.device)
-            obs_goal_images = torch.cat([init, target], dim=0)
+            if self.cfg.policy.datamodule.lang_dataset.without_guidance:
+                obs_goal_images = init
+            else:
+                obs_goal_images = torch.cat([init, target], dim=0)
 
             # Save initial and target frames
             if self.debug:
@@ -463,6 +512,9 @@ class CustomModel(CalvinBaseModel):
                 "observation.state": state[None],
                 "observation.images": obs_goal_images[None],
             }
+            # Using text goal
+            if self.use_text:
+                obs_goal["text"] = encoded_text
             # Predict action
             with torch.inference_mode():
                 self.actions = (

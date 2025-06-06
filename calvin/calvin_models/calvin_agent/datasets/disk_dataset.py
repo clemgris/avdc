@@ -1371,6 +1371,7 @@ class DiskDiffusionOracleDataset(BaseDataset):
         num_subgoals: int = 1,
         save_format: str = "npz",
         pretrain: bool = False,
+        without_guidance: bool = False,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)

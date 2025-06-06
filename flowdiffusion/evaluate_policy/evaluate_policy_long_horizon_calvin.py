@@ -601,14 +601,7 @@ def save_gif(obs_list, save_path, duration=0.2):
 
 
 def rollout(
-    env,
-    model,
-    task_oracle,
-    subtask,
-    val_annotations,
-    plans,
-    debug,
-    debug_path=None,
+    env, model, task_oracle, subtask, val_annotations, plans, debug, debug_path=None
 ):
     """
     Run the actual rollout on one subtask (which is one natural language instruction).
@@ -658,7 +651,7 @@ def rollout(
     if debug_path:
         # Create folder for this failed episode
         os.makedirs(debug_path, exist_ok=True)
-        failure_idx = len(os.listdir(debug_path))
+        failure_idx = len(os.listdir(os.getcwd() + "/" + debug_path))
         failed_episode_path = os.path.join(
             debug_path, f"failures/failed_{subtask.replace(' ', '_')}_{failure_idx}"
         )
