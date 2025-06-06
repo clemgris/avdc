@@ -65,7 +65,7 @@ class CustomModel(CalvinBaseModel):
         self.debug_path = cfg.debug_path
 
         # Low level
-        stats_path = os.path.join(data_path, "training/statistics.yaml")
+        stats_path = os.path.join(cfg.policy.root, "training/statistics.yaml")
         train_stats = OmegaConf.load(stats_path)
 
         self.stats = {
