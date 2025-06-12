@@ -172,19 +172,19 @@ class DiskDiffusionDataset(BaseDataset):
         try:
             print(
                 "trying to load lang data from: ",
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
                 allow_pickle=True,
             ).item()
         except Exception:
             print(
                 "Exception, trying to load lang data from: ",
-                abs_datasets_dir / "auto_lang_ann.npy",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
@@ -511,19 +511,19 @@ class DiskImageDataset(BaseDataset):
         try:
             print(
                 "Trying to load lang data from: ",
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
                 allow_pickle=True,
             ).item()
         except Exception:
             print(
                 "Exception, trying to load lang data from: ",
-                abs_datasets_dir / "auto_lang_ann.npy",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]
@@ -729,19 +729,19 @@ class DiskActionDataset(BaseDataset):
         try:
             print(
                 "trying to load lang data from: ",
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
                 allow_pickle=True,
             ).item()
         except Exception:
             print(
                 "Exception, trying to load lang data from: ",
-                abs_datasets_dir / "auto_lang_ann.npy",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
@@ -1261,19 +1261,19 @@ class DiskEvaluatorDataset(BaseDataset):
         try:
             print(
                 "trying to load lang data from: ",
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
                 allow_pickle=True,
             ).item()
         except Exception:
             print(
                 "Exception, trying to load lang data from: ",
-                abs_datasets_dir / "auto_lang_ann.npy",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
             ).item()
 
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
@@ -1465,21 +1465,20 @@ class DiskDiffusionOracleDataset(BaseDataset):
         try:
             print(
                 "trying to load lang data from: ",
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / self.lang_folder / "auto_lang_ann.npy",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
                 allow_pickle=True,
             ).item()
         except Exception:
             print(
                 "Exception, trying to load lang data from: ",
-                abs_datasets_dir / "auto_lang_ann.npy",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
             )
             lang_data = np.load(
-                abs_datasets_dir / "auto_lang_ann.npy", allow_pickle=True
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
             ).item()
-
         ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
         lang_ann = lang_data["language"]["ann"]  # length total number of annotations
         lang_task = lang_data["language"]["task"]  # length total number of annotations
@@ -1645,3 +1644,190 @@ class DiskDiffusionOracleDataset(BaseDataset):
         )
         padded = torch.vstack((input_tensor, zeros_repeated))
         return padded
+
+
+class DiskFilterDataset(BaseDataset):
+    """
+    Dataset that loads episodes as individual files from disk.
+
+    Args:
+        num_subgoals: Number of subgoals per episodes.
+        save_format: File format in datasets_dir (pkl or npz).
+        pretrain: Set to True when pretraining.
+    """
+
+    def __init__(
+        self,
+        *args: Any,
+        num_subgoals: int = 1,
+        save_format: str = "npz",
+        pretrain: bool = False,
+        without_guidance: bool = False,
+        **kwargs: Any,
+    ):
+        super().__init__(*args, **kwargs)
+        self.pad = False
+
+        self.save_format = save_format
+        if self.save_format == "pkl":
+            self.load_file = load_pkl
+        elif self.save_format == "npz":
+            self.load_file = load_npz
+        else:
+            raise NotImplementedError
+        self.pretrain = pretrain
+        self.num_subgoals = num_subgoals
+        if self.with_lang:
+            self.episode_lookup, self.lang_lookup, self.lang_ann, self.lang_task = (
+                self._build_file_indices_lang(self.abs_datasets_dir)
+            )
+        else:
+            self.episode_lookup = self._build_file_indices(self.abs_datasets_dir)
+
+        self.naming_pattern, self.n_digits = lookup_naming_pattern(
+            self.abs_datasets_dir, self.save_format
+        )
+
+    def _get_episode_name(self, file_idx: int) -> Path:
+        return Path(
+            f"{self.naming_pattern[0]}{file_idx:0{self.n_digits}d}{self.naming_pattern[1]}"
+        )
+
+    def _get_feat_name(self, file_idx: int) -> Path:
+        return Path(
+            self.abs_datasets_dir
+            / f"features_{self.diffuse_on}/features_{file_idx}.npz"
+        )
+
+    def _load_episode(self, idx: int) -> Dict[str, np.ndarray]:
+        """
+        Load num_goals frames of the episodes (plus the initial frame) evenly spaced.
+
+        Args:
+            idx: Index of first frame.
+        Returns:
+            episode: Dict of numpy arrays containing the episode where keys are the names of modalities.
+        """
+        start_idx, end_idx = self.episode_lookup[idx]
+
+        keys = list(chain(*self.observation_space.values()))
+        keys.remove("language")
+        keys.append("scene_obs")
+        episodes_idx = range(start_idx, end_idx + 1)
+
+        episodes = [
+            self.load_file(self._get_episode_name(file_idx))
+            for file_idx in episodes_idx
+        ]
+
+        episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
+        if self.with_lang:
+            episode["task"] = self.lang_task[self.lang_lookup[idx]]
+            episode["language"] = self.lang_ann[self.lang_lookup[idx]]
+        if self.with_feat:
+            features = [
+                self.load_file(self._get_feat_name(file_idx))["patch_emb"]
+                for file_idx in episodes_idx
+            ]
+            episode["features"] = features
+        return episode, (start_idx, end_idx)
+
+    def _build_file_indices_lang(
+        self, abs_datasets_dir: Path
+    ) -> Tuple[np.ndarray, List, np.ndarray]:
+        """
+        This method builds the mapping from index to file_name used for loading the episodes of the language dataset.
+
+        Args:
+            abs_datasets_dir: Absolute path of the directory containing the dataset.
+
+        Returns:
+            episode_lookup: Mapping from training example index to episode (file) index.
+            lang_lookup: Mapping from training example to index of language instruction.
+            lang_ann: Language tasks.
+        """
+        assert abs_datasets_dir.is_dir()
+
+        episode_lookup = []
+
+        # Load lang data from pickle
+        try:
+            print(
+                "trying to load lang data from: ",
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / self.lang_folder / f"{self.auto_lang_name}.npy",
+                allow_pickle=True,
+            ).item()
+        except Exception:
+            print(
+                "Exception, trying to load lang data from: ",
+                abs_datasets_dir / f"{self.auto_lang_name}.npy",
+            )
+            lang_data = np.load(
+                abs_datasets_dir / f"{self.auto_lang_name}.npy", allow_pickle=True
+            ).item()
+
+        ep_start_end_ids = lang_data["info"]["indx"]  # each of them are <=64
+        lang_ann = lang_data["language"]["ann"]  # length total number of annotations
+        lang_task = lang_data["language"]["task"]  # length total number of annotations
+        lang_lookup = []
+        for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
+            assert end_idx >= self.max_window_size
+            lang_lookup.append(i)
+            episode_lookup.append((start_idx, end_idx))
+        return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
+
+    def __getitem__(self, idx: Union[int, Tuple[int, int]]) -> Dict:
+        """
+        Get sequence of dataset.
+
+        Args:
+            idx: Index of the sequence.
+
+        Returns:
+            Loaded sequence.
+        """
+
+        sequence, task, lang, (start_idx, end_idx) = self._get_sequences(idx)
+        return sequence, task, lang, (start_idx, end_idx)
+
+    def _get_sequences(self, idx: int) -> Dict:
+        """
+        Load sequence of length window_size.
+
+        Args:
+            idx: Index of starting frame.
+
+        Returns:
+            dict: Dictionary of tensors of loaded sequence with different input modalities and actions.
+        """
+
+        episode, (start_idx, end_idx) = self._load_episode(idx)
+        task = episode["task"]
+        lang = episode["language"]
+
+        seq_state_obs = process_state(
+            episode, self.observation_space, self.transforms, self.proprio_state
+        )
+        seq_rgb_obs = process_rgb(episode, self.observation_space, self.transforms)
+        seq_depth_obs = process_depth(episode, self.observation_space, self.transforms)
+        seq_acts = process_actions(episode, self.observation_space, self.transforms)
+        info = get_state_info_dict(episode)
+        seq_lang = process_language(episode, self.transforms, self.with_lang)
+        seq_feat = process_features(
+            episode, self.with_feat, self.feat_stats, self.norm_feat
+        )
+        seq_dict = {
+            **seq_state_obs,
+            **seq_rgb_obs,
+            **seq_depth_obs,
+            **seq_acts,
+            **info,
+            **seq_lang,
+            **seq_feat,
+        }  # type:ignore
+        seq_dict["idx"] = idx  # type:ignore
+
+        return seq_dict, task, lang, (start_idx, end_idx)

@@ -68,6 +68,7 @@ class BaseDataset(Dataset):
         diffuse_on: str = "pixel",
         norm_feat: bool = False,
         feat_patch_size: int = 16,
+        auto_lang_name: str = "auto_lang_ann",
     ):
         self.feat_patch_size = feat_patch_size
         self.observation_space = obs_space
@@ -77,6 +78,7 @@ class BaseDataset(Dataset):
         self.with_feat = diffuse_on != "pixel"
         self.diffuse_on = diffuse_on
         self.relative_actions = "rel_actions" in self.observation_space["actions"]
+        self.auto_lang_name = auto_lang_name
 
         self.pad = pad
         self.batch_size = batch_size

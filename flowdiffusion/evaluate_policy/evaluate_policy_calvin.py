@@ -3,7 +3,6 @@ import logging
 import os
 import sys
 from collections import Counter
-from distutils.util import strtobool
 from pathlib import Path
 
 import hydra
@@ -536,7 +535,7 @@ class CustomModel(CalvinBaseModel):
         return selected_action
 
 
-def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint):
+def evaluate_policy_singlestep(model, env, dataset, args, checkpoint):
     if args.server == "jz":
         conf_dir = Path(
             "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf"
@@ -552,12 +551,12 @@ def evaluate_policy_singlestep(model, env, high_level_dataset, args, checkpoint)
         conf_dir / "annotations/new_playtable_validation.yaml"
     )
 
-    high_level_dataset = high_level_dataset
+    dataset = dataset
 
     results = Counter()
     tot_tasks = Counter()
 
-    for episode in high_level_dataset:
+    for episode in dataset:
         task = episode["task"]
         success, length = rollout(
             env, model, episode, task_oracle, args, task, val_annotations
@@ -735,8 +734,7 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--use_oracle_subgoals",
-        type=lambda x: bool(strtobool(x)),
-        default=False,
+        action="store_true",
         help="Use oracle subgoals",
     )
 
@@ -752,12 +750,6 @@ if __name__ == "__main__":
         type=int,
         default=8,
         help="Number of subgoals to generate.",
-    )
-
-    parser.add_argument(
-        "--save_failures",
-        action="store_true",
-        help="Save failed episodes.",
     )
 
     parser.add_argument(
@@ -780,8 +772,15 @@ if __name__ == "__main__":
         help="Replan subgoals every 64 steps.",
     )
 
+    parser.add_argument(
+        "--use_filtered_data",
+        action="store_true",
+        help="Use filtered data (expert sucesses) for evaluation.",
+    )
+
     parser.add_argument("--device", default=0, type=int, help="CUDA device")
     args = parser.parse_args()
+    args.save_failures = args.debug_path is not None
 
     # Load data config
     policy_data_config = OmegaConf.load(
@@ -812,6 +811,9 @@ if __name__ == "__main__":
     )
     del policy_data_config.datamodule.lang_dataset.prob_aug
     policy_data_config.root = data_path
+    policy_data_config.datamodule.lang_dataset.auto_lang_name = (
+        "filtered_auto_lang_ann" if args.use_filtered_data else "auto_lang_ann"
+    )
 
     config = DictConfig(
         {
