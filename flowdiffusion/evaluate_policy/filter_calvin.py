@@ -93,6 +93,10 @@ def evaluate_policy_singlestep(model, env, dataset, args, checkpoint):
         "info": {"episodes": [], "indx": []},
         "language": {"ann": [], "task": []},
     }
+    all_sr_lang_ann = {
+        "info": {"episodes": [], "indx": [], "sr": []},
+        "language": {"ann": [], "task": []},
+    }
     num_trial = 5
     prob_sucess = 0.5
     for episode, task, ann, (start_idx, end_idx) in dataset:
@@ -106,6 +110,12 @@ def evaluate_policy_singlestep(model, env, dataset, args, checkpoint):
             auto_lang_ann_filtered["info"]["indx"].append((start_idx, end_idx))
             auto_lang_ann_filtered["language"]["ann"].append(ann)
             auto_lang_ann_filtered["language"]["task"].append(task)
+
+        all_sr_lang_ann["info"]["indx"].append((start_idx, end_idx))
+        all_sr_lang_ann["language"]["ann"].append(ann)
+        all_sr_lang_ann["language"]["task"].append(task)
+        all_sr_lang_ann["info"]["sr"].append(mean_sucess)
+
         results[task] += mean_sucess >= prob_sucess
         tot_tasks[task] += 1
         print(f"{task}: {results[task]} / {tot_tasks[task]} ({length})")
@@ -126,6 +136,17 @@ def evaluate_policy_singlestep(model, env, dataset, args, checkpoint):
     np.save(
         saving_path,
         auto_lang_ann_filtered,
+        allow_pickle=True,
+    )
+
+    # Save all language annotations with success rate
+    print(
+        f"Saving all language annotations with success rate : {len(all_sr_lang_ann['info']['indx'])}/{len(dataset)}"
+    )
+    saving_path = dataset.abs_datasets_dir / dataset.lang_folder / "all_sr_lang_ann.npy"
+    np.save(
+        saving_path,
+        all_sr_lang_ann,
         allow_pickle=True,
     )
 
