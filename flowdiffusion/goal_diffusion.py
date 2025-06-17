@@ -13,11 +13,11 @@ from einops import rearrange, reduce
 from einops.layers.torch import Rearrange
 from ema_pytorch import EMA
 from pytorch_fid.inception import InceptionV3
+from tools import save_images
 from torch import einsum, nn
 from torch.optim import Adam
 from torch.utils.data import DataLoader, Subset
 from tqdm.auto import tqdm
-from utils import save_images
 from vis_features import pca_project_features
 
 __version__ = "0.0"

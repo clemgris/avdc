@@ -8,10 +8,10 @@ import torch
 import torchvision.transforms as T
 from einops import rearrange
 from PIL import Image
+from tools import get_paths, get_paths_from_dir
 from torch.utils.data import Dataset
 from torchvideotransforms import video_transforms, volume_transforms
 from tqdm import tqdm
-from utils import get_paths, get_paths_from_dir
 
 # from vidaug import augmentors as va
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
