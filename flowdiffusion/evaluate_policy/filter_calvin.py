@@ -98,7 +98,7 @@ def evaluate_policy_singlestep(model, env, dataset, args, checkpoint):
         "language": {"ann": [], "task": []},
     }
     num_trial = 5
-    prob_sucess = 0.5
+    prob_sucess = 0.8
     for episode, task, ann, (start_idx, end_idx) in dataset:
         sucesses = 0
         for __ in range(num_trial):
@@ -264,13 +264,6 @@ if __name__ == "__main__":
         type=str,
         help="Server",
         default="hacienda",
-    )
-
-    parser.add_argument(
-        "--num_subgoals",
-        type=int,
-        default=8,
-        help="Number of subgoals to generate.",
     )
 
     parser.add_argument(
