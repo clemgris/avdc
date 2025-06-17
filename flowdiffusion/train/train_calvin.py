@@ -621,6 +621,11 @@ if __name__ == "__main__":
         default=0.0,
     )  # set to temporal loss weight
     args = parser.parse_args()
+
+    print()
+    print("Arguments:", args)
+    print()
+
     if args.mode == "inference":
         assert args.checkpoint_num is not None
         assert args.inference_path is not None
