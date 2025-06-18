@@ -71,9 +71,10 @@ class HierarchicalModel(CalvinBaseModel):
         self.use_oracle_subgoals = cfg.high_level.use_oracle_subgoals
         self.use_text = self.cfg.policy.diff_cfg.get("use_text", False)
 
+        # Text encoder
+        self._init_text_encoder(cfg)
+
         if not self.use_oracle_subgoals:
-            # Text encoder
-            self._init_text_encoder(cfg)
             # High level diffusion model
             self._init_high_level(cfg)
 
