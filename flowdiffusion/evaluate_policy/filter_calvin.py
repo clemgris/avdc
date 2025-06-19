@@ -54,6 +54,13 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "--data_path",
+        type=str,
+        default=None,
+        help="Path to the dataset.",
+    )
+
+    parser.add_argument(
         "--debug_path",
         type=str,
         default=None,
@@ -82,14 +89,19 @@ if __name__ == "__main__":
     args.ep_len = 100
 
     if args.server == "jz":
-        data_path = "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D_jz"
+        data_path = (
+            args.data_path
+            or "/lustre/fsn1/projects/rech/fch/uxv44vw/CALVIN/task_D_D_jz"
+        )
         rollout_cfg_path = "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
         conf_dir = Path(
             "/lustre/fswork/projects/rech/fch/uxv44vw/clemgris/avdc/calvin/calvin_models/conf"
         )
 
     elif args.server == "hacienda":
-        data_path = "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+        data_path = (
+            args.data_path or "/home/grislain/AVDC/calvin/dataset/calvin_debug_dataset"
+        )
         rollout_cfg_path = "/home/grislain/AVDC/calvin/calvin_models/conf/callbacks/rollout/default.yaml"
         conf_dir = Path("/home/grislain/AVDC/calvin/calvin_models/conf")
     else:
