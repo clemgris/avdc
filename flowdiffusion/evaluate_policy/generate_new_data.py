@@ -54,13 +54,6 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--eval_folder",
-        type=str,
-        help="Where to log the evaluation results.",
-        default="eval_long_horizon",
-    )
-
-    parser.add_argument(
         "--policy_checkpoint_num",
         type=int,
         help="Policy checkpoint num",
@@ -249,7 +242,6 @@ if __name__ == "__main__":
     generate_new_data(
         model,
         env,
-        eval_folder=args.eval_folder,
         debug_path=args.debug_path,
         conf_dir=conf_dir,
         num_data=args.num_data,
@@ -266,7 +258,6 @@ if __name__ == "__main__":
     generate_new_data(
         model,
         env,
-        eval_folder=args.eval_folder,
         debug_path=args.debug_path,
         conf_dir=conf_dir,
         num_data=1,

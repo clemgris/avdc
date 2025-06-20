@@ -27,7 +27,6 @@ from calvin.calvin_models.calvin_agent.evaluation.multistep_sequences import (
 )
 from calvin.calvin_models.calvin_agent.evaluation.utils import (
     get_env_state_for_initial_condition,
-    get_log_dir,
 )
 from methods.rollout import rollout_data_collection
 
@@ -41,8 +40,6 @@ NUM_SEQUENCES = 1000
 def generate_new_data(
     model,
     env,
-    epoch=0,
-    eval_folder=None,
     debug_path=None,
     conf_dir=None,
     num_data=1000,
@@ -68,8 +65,6 @@ def generate_new_data(
     task_oracle = hydra.utils.instantiate(task_cfg)
     val_annotations = OmegaConf.load(conf_dir / "annotations/new_playtable.yaml")
 
-    eval_folder = get_log_dir(eval_folder)
-
     eval_sequences = get_initial_states(num_data=num_data, task=task)
     results = []
     auto_lang_ann = {
@@ -93,13 +88,17 @@ def generate_new_data(
             auto_lang_ann["language"]["task"].append(task)
             auto_lang_ann["info"]["length"].append(length)
 
-    # Save language annotations
-    ann_saving_path = os.path.join(saving_path, "lang_annotations/auto_lang_ann.npy")
-    np.save(
-        ann_saving_path,
-        auto_lang_ann,
-        allow_pickle=True,
-    )
+        if success_counter % 10 == 0:
+            print("Saved", success_counter, "episodes for the task", task)
+            # Save language annotations
+            ann_saving_path = os.path.join(
+                saving_path, "lang_annotations/auto_lang_ann.npy"
+            )
+            np.save(
+                ann_saving_path,
+                auto_lang_ann,
+                allow_pickle=True,
+            )
 
     print(
         "Created",
