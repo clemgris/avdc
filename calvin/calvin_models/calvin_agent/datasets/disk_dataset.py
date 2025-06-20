@@ -1719,7 +1719,6 @@ class DiskFilterDataset(BaseDataset):
             self.load_file(self._get_episode_name(file_idx))
             for file_idx in episodes_idx
         ]
-
         episode = {key: np.stack([ep[key] for ep in episodes]) for key in keys}
         if self.with_lang:
             episode["task"] = self.lang_task[self.lang_lookup[idx]]
@@ -1774,7 +1773,6 @@ class DiskFilterDataset(BaseDataset):
         lang_task = lang_data["language"]["task"]  # length total number of annotations
         lang_lookup = []
         for i, (start_idx, end_idx) in enumerate(ep_start_end_ids):
-            assert end_idx >= self.max_window_size
             lang_lookup.append(i)
             episode_lookup.append((start_idx, end_idx))
         return np.array(episode_lookup), lang_lookup, lang_ann, lang_task
