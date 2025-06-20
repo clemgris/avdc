@@ -522,6 +522,40 @@ def get_sequences(num_sequences=1000, num_workers=None):
     return results
 
 
+def get_initial_states(num_data, task):
+    possible_conditions = {
+        "led": [0, 1],
+        "lightbulb": [0, 1],
+        "slider": ["right", "left"],
+        "drawer": ["closed", "open"],
+        "red_block": ["table", "slider_right", "slider_left"],
+        "blue_block": ["table", "slider_right", "slider_left"],
+        "pink_block": ["table", "slider_right", "slider_left"],
+        "grasped": [0],
+    }
+
+    f = (
+        lambda l: l.count("table") in [1, 2]
+        and l.count("slider_right") < 2
+        and l.count("slider_left") < 2
+    )
+    value_combinations = filter(f, product(*possible_conditions.values()))
+    initial_states = [
+        dict(zip(possible_conditions.keys(), vals)) for vals in value_combinations
+    ]
+    logger.info("Start generating evaluation sequences.")
+    # set the numpy seed temporarily to 0
+    results = []
+    for state in initial_states:
+        seq = [task]
+        if check_sequence(state, seq):
+            results.append((state, seq))
+    results = (results * (num_data // len(results) + 1))[:num_data]
+    logger.info("Done generating evaluation sequences.")
+
+    return results
+
+
 if __name__ == "__main__":
     results = get_sequences(1000)
     counters = [Counter() for _ in range(5)]  # type: ignore

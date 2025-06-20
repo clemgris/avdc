@@ -26,7 +26,13 @@ class CalvinEnvWrapper(gym.Wrapper):
         env = get_env(
             dataset_loader.abs_datasets_dir,
             show_gui=show_gui,
-            obs_space=dataset_loader.observation_space,
+            obs_space={
+                "rgb_obs": ["rgb_static", "rgb_gripper", "rgb_tactile"],
+                "depth_obs": ["depth_static", "depth_gripper", "depth_tactile"],
+                "state_obs": ["robot_obs", "scene_obs"],
+                "actions": ["actions"],
+                "language": ["language"],
+            },
             **kwargs,
         )
         super(CalvinEnvWrapper, self).__init__(env)
@@ -92,6 +98,7 @@ class CalvinEnvWrapper(gym.Wrapper):
             **state_obs,
             **depth_obs,
             "robot_obs_raw": torch.from_numpy(obs["robot_obs"]).to(self.device),
+            "raw_obs": obs,
         }
         return obs_dict
 
